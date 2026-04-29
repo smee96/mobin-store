@@ -7,12 +7,12 @@ compatibility_flags = ["nodejs_compat"]
 [[d1_databases]]
 binding = "DB"
 database_name = "mobin-store-db"
-database_id = "YOUR_D1_DATABASE_ID"
+database_id = "e708f31d-22fe-4cab-b4a4-10b4206684d1"
 
 # KV 캐시 (생성 후 아래 id를 교체하세요)
 [[kv_namespaces]]
 binding = "CACHE"
-id = "YOUR_KV_NAMESPACE_ID"
+id = "2129eb33c0d342d481c8aedc09024a41"
 
 # Cron 스케줄 (자동화 트리거)
 [triggers]
