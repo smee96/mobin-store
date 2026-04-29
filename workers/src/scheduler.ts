@@ -16,6 +16,28 @@ export async function handleScheduled(event: ScheduledEvent, env: Env): Promise<
   if (hour === 0 && dayOfWeek === 1) await runJob(env, 'optimize', optimizeJob);
 }
 
+// 수동 실행용 — 시간 조건 없이 job 이름으로 직접 실행
+export async function runJobDirectly(env: Env, jobName: string): Promise<string> {
+  const jobMap: Record<string, (env: Env) => Promise<string>> = {
+    trend_collect: collectTrendsJob,
+    creative_gen: creativeGenJob,
+    ad_launch: adLaunchJob,
+    metrics_collect: metricsCollectJob,
+    optimize: optimizeJob,
+  };
+
+  const fn = jobMap[jobName];
+  if (!fn) throw new Error(`알 수 없는 job: ${jobName}`);
+
+  return await new Promise<string>(async (resolve, reject) => {
+    await runJob(env, jobName, async (e) => {
+      const result = await fn(e);
+      resolve(result);
+      return result;
+    }).catch(reject);
+  });
+}
+
 // 공통 Job 래퍼 (로깅 + 에러 처리)
 async function runJob(
   env: Env,

@@ -146,34 +146,18 @@ export default {
       // POST /api/run/:job - 수동 Job 실행 (테스트용)
       if (path.match(/^\/api\/run\/.+$/) && request.method === 'POST') {
         const jobName = path.split('/').pop();
-        const { handleScheduled: runScheduled } = await import('./scheduler');
+        if (!jobName) return json({ error: 'job name required' }, 400);
 
-        const fakeEvent = {
-          scheduledTime: new Date().getTime(),
-          cron: jobName,
-        } as unknown as ScheduledEvent;
-
-        // Job 수동 트리거 (UTC 시간 조작)
-        const hourMap: Record<string, number> = {
-          trend_collect: 0,
-          creative_gen: 1,
-          ad_launch: 2,
-          metrics_collect: 12,
-          optimize: 0,
-        };
-
-        if (jobName && hourMap[jobName] !== undefined) {
-          const mockTime = new Date();
-          mockTime.setUTCHours(hourMap[jobName]);
-          (fakeEvent as any).scheduledTime = mockTime.getTime();
+        // 직접 job 함수를 실행 (scheduler의 시간 분기를 우회)
+        const { runJobDirectly } = await import('./scheduler');
+        
+        // 비동기로 실행하되 ctx.waitUntil 대신 직접 await (수동 실행이므로 응답 대기)
+        try {
+          const result = await runJobDirectly(env, jobName);
+          return json({ message: `${jobName} 완료`, result });
+        } catch (e: any) {
+          return json({ message: `${jobName} 실패`, error: e.message }, 500);
         }
-
-        // 비동기 실행 (응답은 즉시)
-        env.DB.prepare(
-          `INSERT INTO automation_logs (job_type, status, message) VALUES (?, 'running', '수동 실행')`
-        ).bind(jobName).run();
-
-        return json({ message: `${jobName} 실행 시작됨` });
       }
 
       // GET /api/logs - 자동화 로그
