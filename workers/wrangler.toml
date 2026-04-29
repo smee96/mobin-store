@@ -1,0 +1,31 @@
+name = "mobin-store-worker"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+# D1 데이터베이스 (생성 후 아래 database_id를 교체하세요)
+[[d1_databases]]
+binding = "DB"
+database_name = "mobin-store-db"
+database_id = "YOUR_D1_DATABASE_ID"
+
+# KV 캐시 (생성 후 아래 id를 교체하세요)
+[[kv_namespaces]]
+binding = "CACHE"
+id = "YOUR_KV_NAMESPACE_ID"
+
+# Cron 스케줄 (자동화 트리거)
+[triggers]
+crons = [
+  "0 0 * * *",   # 매일 09:00 KST (UTC 00:00) - 트렌드 수집
+  "0 1 * * *",   # 매일 10:00 KST (UTC 01:00) - 광고 소재 생성
+  "0 2 * * *",   # 매일 11:00 KST (UTC 02:00) - 광고 집행
+  "0 12 * * *",  # 매일 21:00 KST (UTC 12:00) - 성과 수집
+  "0 0 * * 1"    # 매주 월요일 09:00 KST - 주간 최적화
+]
+
+[vars]
+SMART_STORE_URL = "https://smartstore.naver.com/mobin"
+MIN_ROAS = "150"
+DAILY_BUDGET_PER_AD = "5000"
+MAX_ADS_RUNNING = "10"

@@ -1,0 +1,936 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Movin Store — 자동화 대시보드</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --bg2: #111118;
+    --bg3: #16161f;
+    --card: #1a1a26;
+    --border: #2a2a3a;
+    --accent: #7c5cfc;
+    --accent2: #00e5a0;
+    --accent3: #ff6b6b;
+    --accent4: #ffd93d;
+    --text: #e8e8f0;
+    --muted: #6b6b88;
+    --success: #00e5a0;
+    --warning: #ffd93d;
+    --danger: #ff6b6b;
+    --font: 'Pretendard', sans-serif;
+    --mono: 'Space Mono', monospace;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── Layout ── */
+  .layout { display: flex; min-height: 100vh; }
+
+  .sidebar {
+    width: 220px;
+    background: var(--bg2);
+    border-right: 1px solid var(--border);
+    padding: 24px 0;
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    display: flex; flex-direction: column;
+  }
+
+  .logo {
+    padding: 0 24px 24px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 16px;
+  }
+
+  .logo-mark {
+    font-family: var(--mono);
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: -1px;
+  }
+
+  .logo-sub {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 2px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+
+  .nav-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 24px;
+    font-size: 13px;
+    color: var(--muted);
+    cursor: pointer;
+    transition: all 0.15s;
+    border-left: 2px solid transparent;
+  }
+
+  .nav-item:hover { color: var(--text); background: rgba(124,92,252,0.06); }
+  .nav-item.active { color: var(--accent); border-left-color: var(--accent); background: rgba(124,92,252,0.08); }
+  .nav-icon { font-size: 16px; }
+
+  .main { margin-left: 220px; flex: 1; padding: 32px; }
+
+  .page { display: none; }
+  .page.active { display: block; }
+
+  /* ── Top bar ── */
+  .topbar {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 28px;
+  }
+
+  .page-title { font-size: 22px; font-weight: 700; }
+  .page-sub { font-size: 13px; color: var(--muted); margin-top: 2px; }
+
+  .topbar-right { display: flex; align-items: center; gap: 12px; }
+
+  .worker-url {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    background: var(--bg3);
+    padding: 6px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .worker-url:hover { color: var(--accent); border-color: var(--accent); }
+
+  /* ── Cards ── */
+  .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px; }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+  }
+
+  .stat-card { position: relative; overflow: hidden; }
+  .stat-card::before {
+    content: '';
+    position: absolute;
+    top: 0; right: 0;
+    width: 80px; height: 80px;
+    border-radius: 50%;
+    filter: blur(30px);
+    opacity: 0.15;
+  }
+  .stat-card.purple::before { background: var(--accent); }
+  .stat-card.green::before { background: var(--accent2); }
+  .stat-card.red::before { background: var(--accent3); }
+  .stat-card.yellow::before { background: var(--accent4); }
+
+  .stat-label { font-size: 11px; color: var(--muted); letter-spacing: 1px; text-transform: uppercase; }
+  .stat-value { font-family: var(--mono); font-size: 28px; font-weight: 700; margin: 8px 0 4px; }
+  .stat-value.purple { color: var(--accent); }
+  .stat-value.green { color: var(--accent2); }
+  .stat-value.red { color: var(--accent3); }
+  .stat-value.yellow { color: var(--accent4); }
+  .stat-delta { font-size: 12px; color: var(--muted); }
+  .stat-delta.up { color: var(--success); }
+  .stat-delta.down { color: var(--danger); }
+
+  .card-title {
+    font-size: 13px; font-weight: 600; color: var(--muted);
+    letter-spacing: 1px; text-transform: uppercase;
+    margin-bottom: 16px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+
+  /* ── Table ── */
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th {
+    text-align: left; padding: 10px 12px;
+    font-size: 11px; font-weight: 500; color: var(--muted);
+    border-bottom: 1px solid var(--border);
+    letter-spacing: 0.5px; text-transform: uppercase;
+  }
+  td { padding: 12px; border-bottom: 1px solid rgba(42,42,58,0.5); }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(124,92,252,0.03); }
+
+  /* ── Badges ── */
+  .badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 8px; border-radius: 20px;
+    font-size: 11px; font-weight: 500;
+  }
+  .badge-active { background: rgba(0,229,160,0.1); color: var(--success); }
+  .badge-paused { background: rgba(255,217,61,0.1); color: var(--warning); }
+  .badge-stopped { background: rgba(255,107,107,0.1); color: var(--danger); }
+  .badge-draft { background: rgba(107,107,136,0.1); color: var(--muted); }
+  .badge-success { background: rgba(0,229,160,0.1); color: var(--success); }
+  .badge-failed { background: rgba(255,107,107,0.1); color: var(--danger); }
+  .badge-running { background: rgba(124,92,252,0.1); color: var(--accent); }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+  /* ── Buttons ── */
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 8px 16px; border-radius: 8px;
+    font-size: 13px; font-weight: 500;
+    cursor: pointer; border: none; transition: all 0.15s;
+    font-family: var(--font);
+  }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { background: #9070ff; }
+  .btn-outline { background: transparent; color: var(--text); border: 1px solid var(--border); }
+  .btn-outline:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-sm { padding: 5px 10px; font-size: 12px; }
+  .btn-danger { background: rgba(255,107,107,0.15); color: var(--danger); }
+
+  /* ── Chart ── */
+  .chart-container { position: relative; height: 220px; }
+
+  /* ── Settings ── */
+  .form-group { margin-bottom: 16px; }
+  .form-label { font-size: 12px; color: var(--muted); margin-bottom: 6px; display: block; }
+  .form-input {
+    width: 100%; padding: 10px 14px;
+    background: var(--bg3); border: 1px solid var(--border); border-radius: 8px;
+    color: var(--text); font-family: var(--mono); font-size: 13px;
+    transition: border-color 0.15s;
+  }
+  .form-input:focus { outline: none; border-color: var(--accent); }
+  .form-input::placeholder { color: var(--muted); }
+
+  /* ── Log feed ── */
+  .log-item {
+    display: flex; align-items: flex-start; gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid rgba(42,42,58,0.4);
+    font-size: 12px;
+  }
+  .log-item:last-child { border-bottom: none; }
+  .log-time { color: var(--muted); font-family: var(--mono); white-space: nowrap; }
+  .log-msg { flex: 1; color: var(--text); line-height: 1.5; }
+
+  /* ── Empty state ── */
+  .empty {
+    text-align: center; padding: 40px;
+    color: var(--muted); font-size: 13px;
+  }
+  .empty-icon { font-size: 32px; margin-bottom: 8px; }
+
+  /* ── Modal ── */
+  .modal-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.7);
+    display: none; align-items: center; justify-content: center;
+    z-index: 100; backdrop-filter: blur(4px);
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 16px; padding: 28px; width: 480px; max-width: 90vw;
+  }
+  .modal-title { font-size: 16px; font-weight: 600; margin-bottom: 20px; }
+
+  /* ── Animated status ── */
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+  .pulse { animation: pulse 2s infinite; }
+
+  /* ── Config notice ── */
+  .config-banner {
+    background: rgba(124,92,252,0.08);
+    border: 1px solid rgba(124,92,252,0.25);
+    border-radius: 10px;
+    padding: 14px 18px;
+    margin-bottom: 24px;
+    font-size: 13px;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .config-banner-icon { font-size: 20px; }
+
+  /* ── ROAS colored ── */
+  .roas-high { color: var(--success); font-weight: 600; }
+  .roas-mid { color: var(--warning); font-weight: 600; }
+  .roas-low { color: var(--danger); font-weight: 600; }
+</style>
+</head>
+<body>
+
+<div class="layout">
+  <!-- Sidebar -->
+  <nav class="sidebar">
+    <div class="logo">
+      <div class="logo-mark">MOVIN</div>
+      <div class="logo-sub">Store Automation</div>
+    </div>
+    <div class="nav-item active" onclick="showPage('dashboard')">
+      <span class="nav-icon">📊</span> 대시보드
+    </div>
+    <div class="nav-item" onclick="showPage('products')">
+      <span class="nav-icon">📦</span> 상품 관리
+    </div>
+    <div class="nav-item" onclick="showPage('campaigns')">
+      <span class="nav-icon">📢</span> 광고 캠페인
+    </div>
+    <div class="nav-item" onclick="showPage('trends')">
+      <span class="nav-icon">📈</span> 트렌드 키워드
+    </div>
+    <div class="nav-item" onclick="showPage('logs')">
+      <span class="nav-icon">🔄</span> 자동화 로그
+    </div>
+    <div class="nav-item" onclick="showPage('settings')" style="margin-top:auto">
+      <span class="nav-icon">⚙️</span> 설정
+    </div>
+  </nav>
+
+  <!-- Main Content -->
+  <main class="main">
+
+    <!-- ── DASHBOARD ── -->
+    <div id="page-dashboard" class="page active">
+      <div class="topbar">
+        <div>
+          <div class="page-title">대시보드</div>
+          <div class="page-sub" id="last-updated">로딩 중...</div>
+        </div>
+        <div class="topbar-right">
+          <div class="worker-url" onclick="copyWorkerUrl()" title="클릭하여 Worker URL 복사">
+            🔗 <span id="worker-url-text">Worker URL 설정 필요</span>
+          </div>
+          <button class="btn btn-outline btn-sm" onclick="refreshAll()">↻ 새로고침</button>
+        </div>
+      </div>
+
+      <div id="config-notice" class="config-banner" style="display:none">
+        <span class="config-banner-icon">⚙️</span>
+        <div>
+          <strong>Worker URL을 설정해주세요.</strong>
+          <span style="color:var(--muted)"> 설정 탭에서 Cloudflare Worker URL을 입력하면 실시간 데이터가 연결됩니다.</span>
+          <button class="btn btn-sm btn-primary" style="margin-left:12px" onclick="showPage('settings')">설정하기</button>
+        </div>
+      </div>
+
+      <!-- 오늘 통계 -->
+      <div class="grid-4">
+        <div class="card stat-card purple">
+          <div class="stat-label">오늘 광고비</div>
+          <div class="stat-value purple" id="stat-spend">—</div>
+          <div class="stat-delta" id="stat-spend-sub">데이터 로딩 중</div>
+        </div>
+        <div class="card stat-card green">
+          <div class="stat-label">오늘 매출</div>
+          <div class="stat-value green" id="stat-revenue">—</div>
+          <div class="stat-delta" id="stat-revenue-sub">구매 — 건</div>
+        </div>
+        <div class="card stat-card yellow">
+          <div class="stat-label">오늘 ROAS</div>
+          <div class="stat-value yellow" id="stat-roas">—</div>
+          <div class="stat-delta" id="stat-roas-sub">목표: 200%</div>
+        </div>
+        <div class="card stat-card red">
+          <div class="stat-label">실행 중 광고</div>
+          <div class="stat-value red" id="stat-active-ads">—</div>
+          <div class="stat-delta" id="stat-ads-sub">상품 — 개 운영</div>
+        </div>
+      </div>
+
+      <!-- 이번달 누계 -->
+      <div class="grid-3" style="margin-bottom:24px">
+        <div class="card">
+          <div class="card-title">이번달 광고비</div>
+          <div style="font-family:var(--mono);font-size:22px;font-weight:700" id="month-spend">—</div>
+        </div>
+        <div class="card">
+          <div class="card-title">이번달 매출</div>
+          <div style="font-family:var(--mono);font-size:22px;font-weight:700;color:var(--accent2)" id="month-revenue">—</div>
+        </div>
+        <div class="card">
+          <div class="card-title">이번달 순이익 (30% 마진)</div>
+          <div style="font-family:var(--mono);font-size:22px;font-weight:700;color:var(--accent4)" id="month-profit">—</div>
+        </div>
+      </div>
+
+      <!-- 차트 -->
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-title">매출 vs 광고비 (30일)</div>
+          <div class="chart-container">
+            <canvas id="chart-revenue"></canvas>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">ROAS 추이 (30일)</div>
+          <div class="chart-container">
+            <canvas id="chart-roas"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- 최근 로그 -->
+      <div class="card">
+        <div class="card-title">
+          최근 자동화 실행
+          <button class="btn btn-sm btn-outline" onclick="showPage('logs')">전체 보기</button>
+        </div>
+        <div id="recent-logs"><div class="empty"><div class="empty-icon">🔄</div>로딩 중...</div></div>
+      </div>
+    </div>
+
+    <!-- ── PRODUCTS ── -->
+    <div id="page-products" class="page">
+      <div class="topbar">
+        <div>
+          <div class="page-title">상품 관리</div>
+          <div class="page-sub">자동 발굴 + 수동 등록 상품 목록</div>
+        </div>
+        <button class="btn btn-primary" onclick="openAddProduct()">+ 상품 추가</button>
+      </div>
+      <div class="card">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>상품명 / 키워드</th>
+                <th>월 검색량</th>
+                <th>경쟁도</th>
+                <th>점수</th>
+                <th>상태</th>
+                <th>등록일</th>
+                <th>액션</th>
+              </tr>
+            </thead>
+            <tbody id="products-tbody">
+              <tr><td colspan="7" class="empty">로딩 중...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── CAMPAIGNS ── -->
+    <div id="page-campaigns" class="page">
+      <div class="topbar">
+        <div>
+          <div class="page-title">광고 캠페인</div>
+          <div class="page-sub">Meta 인스타그램 광고 현황</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>상품</th>
+                <th>광고 헤드라인</th>
+                <th>일 예산</th>
+                <th>총 지출</th>
+                <th>총 매출</th>
+                <th>평균 ROAS</th>
+                <th>상태</th>
+                <th>집행일</th>
+              </tr>
+            </thead>
+            <tbody id="campaigns-tbody">
+              <tr><td colspan="8" class="empty">로딩 중...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── TRENDS ── -->
+    <div id="page-trends" class="page">
+      <div class="topbar">
+        <div>
+          <div class="page-title">트렌드 키워드</div>
+          <div class="page-sub">네이버 데이터랩 기반 자동 수집 키워드</div>
+        </div>
+        <button class="btn btn-outline" onclick="runJob('trend_collect')">▶ 지금 수집</button>
+      </div>
+      <div class="card">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>키워드</th>
+                <th>카테고리</th>
+                <th>월 검색량</th>
+                <th>경쟁도</th>
+                <th>트렌드 점수</th>
+                <th>수집일</th>
+                <th>처리</th>
+              </tr>
+            </thead>
+            <tbody id="trends-tbody">
+              <tr><td colspan="7" class="empty">로딩 중...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── LOGS ── -->
+    <div id="page-logs" class="page">
+      <div class="topbar">
+        <div>
+          <div class="page-title">자동화 로그</div>
+          <div class="page-sub">Cron 작업 실행 기록</div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-outline btn-sm" onclick="runJob('trend_collect')">🔍 트렌드 수집</button>
+          <button class="btn btn-outline btn-sm" onclick="runJob('creative_gen')">✍️ 소재 생성</button>
+          <button class="btn btn-outline btn-sm" onclick="runJob('ad_launch')">🚀 광고 집행</button>
+          <button class="btn btn-outline btn-sm" onclick="runJob('metrics_collect')">📊 성과 수집</button>
+        </div>
+      </div>
+      <div class="card">
+        <div id="logs-feed"><div class="empty"><div class="empty-icon">📋</div>로딩 중...</div></div>
+      </div>
+    </div>
+
+    <!-- ── SETTINGS ── -->
+    <div id="page-settings" class="page">
+      <div class="topbar">
+        <div>
+          <div class="page-title">설정</div>
+          <div class="page-sub">Worker URL 및 자동화 파라미터 설정</div>
+        </div>
+      </div>
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-title">🔗 Worker 연결</div>
+          <div class="form-group">
+            <label class="form-label">Cloudflare Worker URL</label>
+            <input class="form-input" id="setting-worker-url" placeholder="https://mobin-store-worker.YOUR_SUBDOMAIN.workers.dev">
+            <div style="font-size:11px;color:var(--muted);margin-top:6px">wrangler deploy 후 출력된 URL을 입력하세요</div>
+          </div>
+          <button class="btn btn-primary" onclick="saveSettings()">저장 & 연결 테스트</button>
+          <div id="connection-status" style="margin-top:12px;font-size:12px;display:none"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">⚙️ 자동화 파라미터</div>
+          <div class="form-group">
+            <label class="form-label">일일 광고 예산 (원/상품)</label>
+            <input class="form-input" id="setting-budget" value="5000" placeholder="5000">
+          </div>
+          <div class="form-group">
+            <label class="form-label">최소 ROAS 기준 (%)</label>
+            <input class="form-input" id="setting-min-roas" value="150" placeholder="150">
+          </div>
+          <div class="form-group">
+            <label class="form-label">최대 동시 광고 수</label>
+            <input class="form-input" id="setting-max-ads" value="10" placeholder="10">
+          </div>
+          <button class="btn btn-outline" onclick="saveParams()">파라미터 저장</button>
+        </div>
+
+        <div class="card" style="grid-column:1/-1">
+          <div class="card-title">🚀 배포 가이드</div>
+          <div style="font-size:13px;line-height:2;color:var(--muted)">
+            <div><strong style="color:var(--text)">1. 사전 준비</strong> — Cloudflare 계정 생성 (무료), Node.js 설치</div>
+            <div style="background:var(--bg3);border-radius:8px;padding:12px;margin:8px 0;font-family:var(--mono);font-size:12px;color:var(--accent2)">
+              npm install -g wrangler<br>
+              wrangler login<br>
+              cd workers && npm install
+            </div>
+            <div><strong style="color:var(--text)">2. D1 DB 생성</strong></div>
+            <div style="background:var(--bg3);border-radius:8px;padding:12px;margin:8px 0;font-family:var(--mono);font-size:12px;color:var(--accent2)">
+              wrangler d1 create mobin-store-db<br>
+              wrangler kv:namespace create CACHE<br>
+              <span style="color:var(--muted)"># 출력된 id를 wrangler.toml에 복사</span>
+            </div>
+            <div><strong style="color:var(--text)">3. API 키 등록</strong></div>
+            <div style="background:var(--bg3);border-radius:8px;padding:12px;margin:8px 0;font-family:var(--mono);font-size:12px;color:var(--accent2)">
+              wrangler secret put NAVER_CLIENT_ID<br>
+              wrangler secret put NAVER_CLIENT_SECRET<br>
+              wrangler secret put META_ACCESS_TOKEN<br>
+              wrangler secret put META_AD_ACCOUNT_ID<br>
+              wrangler secret put META_PAGE_ID<br>
+              wrangler secret put CLAUDE_API_KEY<br>
+              wrangler secret put REMOVEBG_API_KEY
+            </div>
+            <div><strong style="color:var(--text)">4. 배포</strong></div>
+            <div style="background:var(--bg3);border-radius:8px;padding:12px;margin:8px 0;font-family:var(--mono);font-size:12px;color:var(--accent2)">
+              wrangler d1 execute mobin-store-db --file=./schema.sql<br>
+              wrangler deploy<br>
+              <span style="color:var(--muted)"># 출력된 URL을 위 설정에 입력</span>
+            </div>
+            <div><strong style="color:var(--text)">5. Pages 배포</strong> — GitHub에 push 후 Cloudflare Pages에서 연결</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- Add Product Modal -->
+<div class="modal-overlay" id="modal-product">
+  <div class="modal">
+    <div class="modal-title">상품 추가</div>
+    <div class="form-group">
+      <label class="form-label">상품명 *</label>
+      <input class="form-input" id="new-product-name" placeholder="예: 스트레칭 폼롤러">
+    </div>
+    <div class="form-group">
+      <label class="form-label">검색 키워드 *</label>
+      <input class="form-input" id="new-product-keyword" placeholder="예: 폼롤러">
+    </div>
+    <div class="form-group">
+      <label class="form-label">스마트스토어 상품 URL</label>
+      <input class="form-input" id="new-product-url" placeholder="https://smartstore.naver.com/mobin/products/...">
+    </div>
+    <div class="grid-2" style="margin-bottom:0">
+      <div class="form-group">
+        <label class="form-label">판매가 (원)</label>
+        <input class="form-input" id="new-product-price" type="number" placeholder="25000">
+      </div>
+      <div class="form-group">
+        <label class="form-label">마진율 (%)</label>
+        <input class="form-input" id="new-product-margin" type="number" placeholder="30">
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button class="btn btn-primary" onclick="submitProduct()">등록</button>
+      <button class="btn btn-outline" onclick="closeModal('modal-product')">취소</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── State ───
+let WORKER_URL = localStorage.getItem('mobin_worker_url') || '';
+let chartRevenue = null;
+let chartRoas = null;
+
+// ─── Init ───
+document.addEventListener('DOMContentLoaded', () => {
+  if (WORKER_URL) {
+    document.getElementById('setting-worker-url').value = WORKER_URL;
+    document.getElementById('worker-url-text').textContent = WORKER_URL.replace('https://', '').split('.')[0] + '...workers.dev';
+  } else {
+    document.getElementById('config-notice').style.display = 'flex';
+  }
+  loadDashboard();
+});
+
+// ─── Navigation ───
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  event.currentTarget.classList.add('active');
+
+  if (name === 'products') loadProducts();
+  if (name === 'campaigns') loadCampaigns();
+  if (name === 'trends') loadTrends();
+  if (name === 'logs') loadLogs();
+}
+
+// ─── API helper ───
+async function api(path, options = {}) {
+  if (!WORKER_URL) return null;
+  try {
+    const res = await fetch(WORKER_URL + path, options);
+    return await res.json();
+  } catch (e) {
+    console.error('API error:', e);
+    return null;
+  }
+}
+
+// ─── Dashboard ───
+async function loadDashboard() {
+  const data = await api('/api/dashboard');
+  if (!data) {
+    document.getElementById('last-updated').textContent = 'Worker URL을 설정해주세요';
+    document.getElementById('config-notice').style.display = 'flex';
+    return;
+  }
+
+  document.getElementById('config-notice').style.display = 'none';
+  document.getElementById('last-updated').textContent = '마지막 업데이트: ' + new Date().toLocaleString('ko-KR');
+
+  // 통계 카드
+  const t = data.today || {};
+  const m = data.month || {};
+
+  document.getElementById('stat-spend').textContent = won(t.spend);
+  document.getElementById('stat-revenue').textContent = won(t.revenue);
+  document.getElementById('stat-roas').textContent = roas(t.roas);
+  document.getElementById('stat-revenue-sub').textContent = `구매 ${t.purchases || 0}건`;
+
+  const activeAds = data.campaigns?.find(c => c.status === 'active')?.cnt || 0;
+  const activeProducts = data.products?.find(p => p.status === 'active')?.cnt || 0;
+  document.getElementById('stat-active-ads').textContent = activeAds;
+  document.getElementById('stat-ads-sub').textContent = `상품 ${activeProducts}개 운영`;
+
+  const roasVal = parseFloat(t.roas || 0);
+  const roasEl = document.getElementById('stat-roas');
+  if (roasVal >= 2) roasEl.className = 'stat-value green';
+  else if (roasVal >= 1.5) roasEl.className = 'stat-value yellow';
+  else if (roasVal > 0) roasEl.className = 'stat-value red';
+
+  document.getElementById('month-spend').textContent = won(m.spend);
+  document.getElementById('month-revenue').textContent = won(m.revenue);
+  document.getElementById('month-profit').textContent = won((m.revenue || 0) * 0.3 - (m.spend || 0));
+
+  // 로그
+  renderLogs(data.logs || [], 'recent-logs', 5);
+
+  // 차트
+  await loadCharts();
+}
+
+async function loadCharts() {
+  const data = await api('/api/metrics/chart?days=30');
+  if (!data || !data.length) return;
+
+  const labels = data.map(d => d.date.slice(5));
+  const spends = data.map(d => Math.round((d.spend || 0) / 1000));
+  const revenues = data.map(d => Math.round((d.revenue || 0) / 1000));
+  const roasData = data.map(d => parseFloat((d.roas || 0).toFixed(2)));
+
+  if (chartRevenue) chartRevenue.destroy();
+  chartRevenue = new Chart(document.getElementById('chart-revenue'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: '매출 (천원)', data: revenues, backgroundColor: 'rgba(0,229,160,0.5)', borderColor: '#00e5a0', borderWidth: 1 },
+        { label: '광고비 (천원)', data: spends, backgroundColor: 'rgba(124,92,252,0.5)', borderColor: '#7c5cfc', borderWidth: 1 },
+      ]
+    },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#6b6b88', font: { size: 11 } } } }, scales: { x: { ticks: { color: '#6b6b88', font: { size: 10 } }, grid: { color: '#2a2a3a' } }, y: { ticks: { color: '#6b6b88', font: { size: 10 } }, grid: { color: '#2a2a3a' } } } }
+  });
+
+  if (chartRoas) chartRoas.destroy();
+  chartRoas = new Chart(document.getElementById('chart-roas'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        { label: 'ROAS', data: roasData, borderColor: '#ffd93d', backgroundColor: 'rgba(255,217,61,0.1)', fill: true, tension: 0.4, pointRadius: 3 },
+        { label: '목표 (200%)', data: Array(labels.length).fill(2), borderColor: '#ff6b6b', borderDash: [4, 4], borderWidth: 1, pointRadius: 0 },
+      ]
+    },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#6b6b88', font: { size: 11 } } } }, scales: { x: { ticks: { color: '#6b6b88', font: { size: 10 } }, grid: { color: '#2a2a3a' } }, y: { ticks: { color: '#6b6b88', font: { size: 10 } }, grid: { color: '#2a2a3a' } } } }
+  });
+}
+
+// ─── Products ───
+async function loadProducts() {
+  const data = await api('/api/products');
+  if (!data) { document.getElementById('products-tbody').innerHTML = '<tr><td colspan="7" class="empty">Worker URL을 설정해주세요</td></tr>'; return; }
+
+  if (!data.length) { document.getElementById('products-tbody').innerHTML = '<tr><td colspan="7" class="empty"><div class="empty-icon">📦</div>등록된 상품이 없습니다</td></tr>'; return; }
+
+  document.getElementById('products-tbody').innerHTML = data.map(p => `
+    <tr>
+      <td><div style="font-weight:500">${p.name}</div><div style="font-size:11px;color:var(--muted)">#${p.keyword}</div></td>
+      <td style="font-family:var(--mono)">${(p.monthly_search_volume || 0).toLocaleString()}</td>
+      <td>${compLevel(p.competition_count)}</td>
+      <td><span style="font-family:var(--mono);color:var(--accent)">${(p.score || 0).toFixed(1)}</span></td>
+      <td>${badge(p.status)}</td>
+      <td style="color:var(--muted);font-size:11px">${p.created_at?.slice(0, 10) || '—'}</td>
+      <td>
+        ${p.status === 'active'
+          ? `<button class="btn btn-sm btn-danger" onclick="updateProductStatus(${p.id}, 'paused')">일시정지</button>`
+          : `<button class="btn btn-sm btn-outline" onclick="updateProductStatus(${p.id}, 'active')">활성화</button>`}
+      </td>
+    </tr>
+  `).join('');
+}
+
+async function updateProductStatus(id, status) {
+  await api(`/api/products/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) });
+  loadProducts();
+}
+
+// ─── Campaigns ───
+async function loadCampaigns() {
+  const data = await api('/api/campaigns');
+  if (!data) { document.getElementById('campaigns-tbody').innerHTML = '<tr><td colspan="8" class="empty">Worker URL을 설정해주세요</td></tr>'; return; }
+
+  if (!data.length) { document.getElementById('campaigns-tbody').innerHTML = '<tr><td colspan="8" class="empty"><div class="empty-icon">📢</div>실행 중인 광고가 없습니다</td></tr>'; return; }
+
+  document.getElementById('campaigns-tbody').innerHTML = data.map(c => {
+    const r = parseFloat(c.avg_roas || 0);
+    const roasClass = r >= 2 ? 'roas-high' : r >= 1.5 ? 'roas-mid' : 'roas-low';
+    return `<tr>
+      <td><div style="font-weight:500">${c.product_name}</div><div style="font-size:11px;color:var(--muted)">#${c.keyword}</div></td>
+      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.headline}</td>
+      <td style="font-family:var(--mono)">${won(c.daily_budget)}</td>
+      <td style="font-family:var(--mono)">${won(c.total_spend)}</td>
+      <td style="font-family:var(--mono);color:var(--accent2)">${won(c.total_revenue)}</td>
+      <td><span class="${roasClass}">${roas(c.avg_roas)}</span></td>
+      <td>${badge(c.status)}</td>
+      <td style="color:var(--muted);font-size:11px">${c.created_at?.slice(0, 10) || '—'}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ─── Trends ───
+async function loadTrends() {
+  const data = await api('/api/trends');
+  if (!data) { document.getElementById('trends-tbody').innerHTML = '<tr><td colspan="7" class="empty">Worker URL을 설정해주세요</td></tr>'; return; }
+  if (!data.length) { document.getElementById('trends-tbody').innerHTML = '<tr><td colspan="7" class="empty"><div class="empty-icon">📈</div>수집된 키워드가 없습니다. "지금 수집" 버튼을 눌러주세요</td></tr>'; return; }
+
+  document.getElementById('trends-tbody').innerHTML = data.map(k => `
+    <tr>
+      <td style="font-weight:500">${k.keyword}</td>
+      <td style="color:var(--muted);font-size:12px">${k.category || '—'}</td>
+      <td style="font-family:var(--mono)">${(k.search_volume || 0).toLocaleString()}</td>
+      <td>${compLevel(k.competition_count)}</td>
+      <td><div style="display:flex;align-items:center;gap:8px">
+        <div style="background:var(--bg3);border-radius:4px;height:6px;width:80px;overflow:hidden">
+          <div style="background:var(--accent);height:100%;width:${Math.min(k.trend_score || 0, 100)}%"></div>
+        </div>
+        <span style="font-family:var(--mono);font-size:11px;color:var(--accent)">${(k.trend_score || 0).toFixed(1)}</span>
+      </div></td>
+      <td style="color:var(--muted);font-size:11px">${k.collected_at?.slice(0, 10) || '—'}</td>
+      <td>${k.processed ? '<span class="badge badge-success">✓ 등록됨</span>' : '<span class="badge badge-draft">미처리</span>'}</td>
+    </tr>
+  `).join('');
+}
+
+// ─── Logs ───
+async function loadLogs() {
+  const data = await api('/api/logs');
+  renderLogs(data || [], 'logs-feed');
+}
+
+function renderLogs(logs, containerId, limit = 30) {
+  const container = document.getElementById(containerId);
+  if (!logs.length) { container.innerHTML = '<div class="empty"><div class="empty-icon">📋</div>로그가 없습니다</div>'; return; }
+
+  const jobEmoji = { trend_collect: '🔍', creative_gen: '✍️', ad_launch: '🚀', metrics_collect: '📊', optimize: '⚡' };
+
+  container.innerHTML = logs.slice(0, limit).map(log => `
+    <div class="log-item">
+      <span class="log-time">${log.started_at?.slice(5, 16) || '—'}</span>
+      <span>${jobEmoji[log.job_type] || '🔄'}</span>
+      <div class="log-msg">
+        <span style="margin-right:8px">${badge(log.status)}</span>
+        <strong>${log.job_type}</strong>
+        ${log.message ? `<span style="color:var(--muted)"> — ${log.message}</span>` : ''}
+      </div>
+    </div>
+  `).join('');
+}
+
+// ─── Manual Job Run ───
+async function runJob(jobName) {
+  if (!WORKER_URL) { alert('Worker URL을 먼저 설정해주세요'); return; }
+  const result = await api(`/api/run/${jobName}`, { method: 'POST' });
+  if (result) { alert(`✅ ${jobName} 실행 시작!\n\n로그 탭에서 결과를 확인하세요.`); }
+}
+
+// ─── Product Modal ───
+function openAddProduct() {
+  document.getElementById('modal-product').classList.add('open');
+}
+function closeModal(id) {
+  document.getElementById(id).classList.remove('open');
+}
+async function submitProduct() {
+  const name = document.getElementById('new-product-name').value.trim();
+  const keyword = document.getElementById('new-product-keyword').value.trim();
+  if (!name || !keyword) { alert('상품명과 키워드는 필수입니다'); return; }
+
+  const result = await api('/api/products', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      name,
+      keyword,
+      smart_store_url: document.getElementById('new-product-url').value,
+      price: parseInt(document.getElementById('new-product-price').value) || null,
+      margin_rate: parseInt(document.getElementById('new-product-margin').value) || 30,
+    })
+  });
+  if (result) { closeModal('modal-product'); loadProducts(); alert('✅ 상품이 등록되었습니다!'); }
+}
+
+// ─── Settings ───
+async function saveSettings() {
+  const url = document.getElementById('setting-worker-url').value.trim().replace(/\/$/, '');
+  if (!url) return;
+  WORKER_URL = url;
+  localStorage.setItem('mobin_worker_url', url);
+  document.getElementById('worker-url-text').textContent = url.replace('https://', '').split('.')[0] + '...workers.dev';
+
+  const statusEl = document.getElementById('connection-status');
+  statusEl.style.display = 'block';
+  statusEl.textContent = '연결 테스트 중...';
+  statusEl.style.color = 'var(--muted)';
+
+  const result = await api('/api/dashboard');
+  if (result) {
+    statusEl.textContent = '✅ 연결 성공! 대시보드를 새로고침합니다.';
+    statusEl.style.color = 'var(--success)';
+    document.getElementById('config-notice').style.display = 'none';
+    setTimeout(() => { showPage('dashboard'); loadDashboard(); }, 1000);
+  } else {
+    statusEl.textContent = '❌ 연결 실패. URL을 확인해주세요.';
+    statusEl.style.color = 'var(--danger)';
+  }
+}
+
+function saveParams() {
+  localStorage.setItem('mobin_budget', document.getElementById('setting-budget').value);
+  localStorage.setItem('mobin_min_roas', document.getElementById('setting-min-roas').value);
+  localStorage.setItem('mobin_max_ads', document.getElementById('setting-max-ads').value);
+  alert('✅ 파라미터 저장됨 (wrangler.toml에도 반영 필요)');
+}
+
+function refreshAll() { loadDashboard(); }
+
+function copyWorkerUrl() {
+  navigator.clipboard.writeText(WORKER_URL || '');
+  alert('복사됨: ' + WORKER_URL);
+}
+
+// ─── Formatters ───
+function won(v) {
+  if (v == null || v === '' || isNaN(v)) return '—';
+  return Math.round(v).toLocaleString('ko-KR') + '원';
+}
+
+function roas(v) {
+  if (v == null || isNaN(v)) return '—';
+  return (parseFloat(v) * 100).toFixed(0) + '%';
+}
+
+function badge(status) {
+  const map = { active: '활성', paused: '일시정지', stopped: '중단', draft: '초안', approved: '승인', discovered: '발견', success: '성공', failed: '실패', running: '실행중' };
+  return `<span class="badge badge-${status}"><span class="dot"></span>${map[status] || status}</span>`;
+}
+
+function compLevel(count) {
+  if (!count) return '—';
+  if (count < 200) return '<span style="color:var(--success);font-size:12px">● 낮음</span>';
+  if (count < 600) return '<span style="color:var(--warning);font-size:12px">● 중간</span>';
+  return '<span style="color:var(--danger);font-size:12px">● 높음</span>';
+}
+</script>
+</body>
+</html>
