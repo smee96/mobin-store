@@ -280,22 +280,22 @@
       <div class="logo-mark">MOVIN</div>
       <div class="logo-sub">Store Automation</div>
     </div>
-    <div class="nav-item active" onclick="showPage('dashboard')">
+    <div class="nav-item active" data-page="dashboard" onclick="showPage('dashboard', this)">
       <span class="nav-icon">📊</span> 대시보드
     </div>
-    <div class="nav-item" onclick="showPage('products')">
+    <div class="nav-item" data-page="products" onclick="showPage('products', this)">
       <span class="nav-icon">📦</span> 상품 관리
     </div>
-    <div class="nav-item" onclick="showPage('campaigns')">
+    <div class="nav-item" data-page="campaigns" onclick="showPage('campaigns', this)">
       <span class="nav-icon">📢</span> 광고 캠페인
     </div>
-    <div class="nav-item" onclick="showPage('trends')">
+    <div class="nav-item" data-page="trends" onclick="showPage('trends', this)">
       <span class="nav-icon">📈</span> 트렌드 키워드
     </div>
-    <div class="nav-item" onclick="showPage('logs')">
+    <div class="nav-item" data-page="logs" onclick="showPage('logs', this)">
       <span class="nav-icon">🔄</span> 자동화 로그
     </div>
-    <div class="nav-item" onclick="showPage('settings')" style="margin-top:auto">
+    <div class="nav-item" data-page="settings" onclick="showPage('settings', this)" style="margin-top:auto">
       <span class="nav-icon">⚙️</span> 설정
     </div>
   </nav>
@@ -324,6 +324,7 @@
           <strong>Worker URL을 설정해주세요.</strong>
           <span style="color:var(--muted)"> 설정 탭에서 Cloudflare Worker URL을 입력하면 실시간 데이터가 연결됩니다.</span>
           <button class="btn btn-sm btn-primary" style="margin-left:12px" onclick="showPage('settings')">설정하기</button>
+
         </div>
       </div>
 
@@ -388,6 +389,7 @@
         <div class="card-title">
           최근 자동화 실행
           <button class="btn btn-sm btn-outline" onclick="showPage('logs')">전체 보기</button>
+
         </div>
         <div id="recent-logs"><div class="empty"><div class="empty-icon">🔄</div>로딩 중...</div></div>
       </div>
@@ -622,22 +624,27 @@ let chartRevenue = null;
 let chartRoas = null;
 
 // ─── Init ───
+const DEFAULT_WORKER_URL = 'https://mobin-store-worker.kyuhan-lee.workers.dev';
 document.addEventListener('DOMContentLoaded', () => {
-  if (WORKER_URL) {
-    document.getElementById('setting-worker-url').value = WORKER_URL;
-    document.getElementById('worker-url-text').textContent = WORKER_URL.replace('https://', '').split('.')[0] + '...workers.dev';
-  } else {
-    document.getElementById('config-notice').style.display = 'flex';
+  // localStorage에 없으면 기본 Worker URL 자동 설정
+  if (!WORKER_URL) {
+    WORKER_URL = DEFAULT_WORKER_URL;
+    localStorage.setItem('mobin_worker_url', WORKER_URL);
   }
+  document.getElementById('setting-worker-url').value = WORKER_URL;
+  document.getElementById('worker-url-text').textContent = WORKER_URL.replace('https://', '').split('.')[0] + '...workers.dev';
+  document.getElementById('config-notice').style.display = 'none';
   loadDashboard();
 });
 
 // ─── Navigation ───
-function showPage(name) {
+function showPage(name, el) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   document.getElementById('page-' + name).classList.add('active');
-  event.currentTarget.classList.add('active');
+  // el이 있으면 (nav 클릭), 없으면 nav에서 해당 이름으로 찾아서 활성화
+  const navEl = el || document.querySelector(`.nav-item[data-page="${name}"]`);
+  if (navEl) navEl.classList.add('active');
 
   if (name === 'products') loadProducts();
   if (name === 'campaigns') loadCampaigns();
@@ -650,6 +657,11 @@ async function api(path, options = {}) {
   if (!WORKER_URL) return null;
   try {
     const res = await fetch(WORKER_URL + path, options);
+    const contentType = res.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+      console.error('API error: 응답이 JSON이 아닙니다. Worker URL을 확인하세요.', await res.text().then(t => t.slice(0, 100)));
+      return null;
+    }
     return await res.json();
   } catch (e) {
     console.error('API error:', e);
