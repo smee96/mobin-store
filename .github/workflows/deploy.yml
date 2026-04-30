@@ -6,7 +6,6 @@ on:
   workflow_dispatch:
 
 jobs:
-  # ── Workers 배포 ──
   deploy-worker:
     name: Deploy Worker
     runs-on: ubuntu-latest
@@ -17,12 +16,10 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: workers/package-lock.json
 
       - name: Install dependencies
         working-directory: workers
-        run: npm ci
+        run: npm install
 
       - name: Deploy Worker
         working-directory: workers
@@ -31,7 +28,6 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
-  # ── Pages 배포 ──
   deploy-pages:
     name: Deploy Dashboard
     runs-on: ubuntu-latest
@@ -44,6 +40,6 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          projectName: movin-store-dashboard
+          projectName: mobin-store-dashboard
           directory: pages/src
           gitHubToken: ${{ secrets.GITHUB_TOKEN }}
