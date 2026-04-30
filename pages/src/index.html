@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Movin Store — 자동화 대시보드</title>
+<title>Mobin Store — 자동화 대시보드</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
@@ -37,7 +37,6 @@
     overflow-x: hidden;
   }
 
-  /* ── Layout ── */
   .layout { display: flex; min-height: 100vh; }
 
   .sidebar {
@@ -91,7 +90,6 @@
   .page { display: none; }
   .page.active { display: block; }
 
-  /* ── Top bar ── */
   .topbar {
     display: flex; justify-content: space-between; align-items: center;
     margin-bottom: 28px;
@@ -99,7 +97,6 @@
 
   .page-title { font-size: 22px; font-weight: 700; }
   .page-sub { font-size: 13px; color: var(--muted); margin-top: 2px; }
-
   .topbar-right { display: flex; align-items: center; gap: 12px; }
 
   .worker-url {
@@ -115,7 +112,6 @@
   }
   .worker-url:hover { color: var(--accent); border-color: var(--accent); }
 
-  /* ── Cards ── */
   .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
   .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
   .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px; }
@@ -159,7 +155,6 @@
     display: flex; align-items: center; justify-content: space-between;
   }
 
-  /* ── Table ── */
   .table-wrap { overflow-x: auto; }
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
   th {
@@ -172,7 +167,6 @@
   tr:last-child td { border-bottom: none; }
   tr:hover td { background: rgba(124,92,252,0.03); }
 
-  /* ── Badges ── */
   .badge {
     display: inline-flex; align-items: center; gap: 4px;
     padding: 3px 8px; border-radius: 20px;
@@ -187,25 +181,23 @@
   .badge-running { background: rgba(124,92,252,0.1); color: var(--accent); }
   .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 
-  /* ── Buttons ── */
   .btn {
     display: inline-flex; align-items: center; gap: 6px;
     padding: 8px 16px; border-radius: 8px;
     font-size: 13px; font-weight: 500;
     cursor: pointer; border: none; transition: all 0.15s;
     font-family: var(--font);
+    text-decoration: none;
   }
   .btn-primary { background: var(--accent); color: #fff; }
   .btn-primary:hover { background: #9070ff; }
   .btn-outline { background: transparent; color: var(--text); border: 1px solid var(--border); }
   .btn-outline:hover { border-color: var(--accent); color: var(--accent); }
   .btn-sm { padding: 5px 10px; font-size: 12px; }
-  .btn-danger { background: rgba(255,107,107,0.15); color: var(--danger); }
+  .btn-danger { background: rgba(255,107,107,0.15); color: var(--danger); border: none; }
 
-  /* ── Chart ── */
   .chart-container { position: relative; height: 220px; }
 
-  /* ── Settings ── */
   .form-group { margin-bottom: 16px; }
   .form-label { font-size: 12px; color: var(--muted); margin-bottom: 6px; display: block; }
   .form-input {
@@ -217,7 +209,6 @@
   .form-input:focus { outline: none; border-color: var(--accent); }
   .form-input::placeholder { color: var(--muted); }
 
-  /* ── Log feed ── */
   .log-item {
     display: flex; align-items: flex-start; gap: 12px;
     padding: 10px 0;
@@ -228,14 +219,12 @@
   .log-time { color: var(--muted); font-family: var(--mono); white-space: nowrap; }
   .log-msg { flex: 1; color: var(--text); line-height: 1.5; }
 
-  /* ── Empty state ── */
   .empty {
     text-align: center; padding: 40px;
     color: var(--muted); font-size: 13px;
   }
   .empty-icon { font-size: 32px; margin-bottom: 8px; }
 
-  /* ── Modal ── */
   .modal-overlay {
     position: fixed; inset: 0;
     background: rgba(0,0,0,0.7);
@@ -249,11 +238,9 @@
   }
   .modal-title { font-size: 16px; font-weight: 600; margin-bottom: 20px; }
 
-  /* ── Animated status ── */
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
   .pulse { animation: pulse 2s infinite; }
 
-  /* ── Config notice ── */
   .config-banner {
     background: rgba(124,92,252,0.08);
     border: 1px solid rgba(124,92,252,0.25);
@@ -265,10 +252,105 @@
   }
   .config-banner-icon { font-size: 20px; }
 
-  /* ── ROAS colored ── */
   .roas-high { color: var(--success); font-weight: 600; }
   .roas-mid { color: var(--warning); font-weight: 600; }
   .roas-low { color: var(--danger); font-weight: 600; }
+
+  /* ── 상품 검색 그리드 ── */
+  .product-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 16px;
+  }
+  .product-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    transition: border-color 0.15s, transform 0.15s;
+  }
+  .product-card:hover {
+    border-color: var(--accent);
+    transform: translateY(-2px);
+  }
+  .product-card-img {
+    width: 100%; height: 180px;
+    object-fit: cover;
+    background: var(--bg3);
+  }
+  .product-card-body {
+    padding: 12px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .product-card-title {
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1.4;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+  .product-card-price {
+    font-family: var(--mono);
+    font-size: 16px;
+    color: var(--accent2);
+    font-weight: 700;
+  }
+  .product-card-price span {
+    font-size: 11px;
+    color: var(--muted);
+    font-weight: 400;
+  }
+  .product-card-meta {
+    background: var(--bg3);
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-size: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .product-card-meta-row {
+    display: flex;
+    justify-content: space-between;
+  }
+  .product-card-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: auto;
+    padding-top: 4px;
+  }
+  .source-badge {
+    position: absolute;
+    top: 8px; right: 8px;
+    background: rgba(0,0,0,0.65);
+    color: #fff;
+    font-size: 10px;
+    padding: 2px 7px;
+    border-radius: 10px;
+    font-family: var(--mono);
+  }
+  .search-loading {
+    text-align: center;
+    padding: 60px;
+    color: var(--muted);
+    font-size: 13px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .spinner {
+    width: 28px; height: 28px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin: 0 auto 12px;
+  }
 </style>
 </head>
 <body>
@@ -277,11 +359,14 @@
   <!-- Sidebar -->
   <nav class="sidebar">
     <div class="logo">
-      <div class="logo-mark">MOVIN</div>
+      <div class="logo-mark">MOBIN</div>
       <div class="logo-sub">Store Automation</div>
     </div>
     <div class="nav-item active" data-page="dashboard" onclick="showPage('dashboard', this)">
       <span class="nav-icon">📊</span> 대시보드
+    </div>
+    <div class="nav-item" data-page="search" onclick="showPage('search', this)">
+      <span class="nav-icon">🔍</span> 상품 검색
     </div>
     <div class="nav-item" data-page="products" onclick="showPage('products', this)">
       <span class="nav-icon">📦</span> 상품 관리
@@ -300,7 +385,6 @@
     </div>
   </nav>
 
-  <!-- Main Content -->
   <main class="main">
 
     <!-- ── DASHBOARD ── -->
@@ -324,11 +408,9 @@
           <strong>Worker URL을 설정해주세요.</strong>
           <span style="color:var(--muted)"> 설정 탭에서 Cloudflare Worker URL을 입력하면 실시간 데이터가 연결됩니다.</span>
           <button class="btn btn-sm btn-primary" style="margin-left:12px" onclick="showPage('settings')">설정하기</button>
-
         </div>
       </div>
 
-      <!-- 오늘 통계 -->
       <div class="grid-4">
         <div class="card stat-card purple">
           <div class="stat-label">오늘 광고비</div>
@@ -352,7 +434,6 @@
         </div>
       </div>
 
-      <!-- 이번달 누계 -->
       <div class="grid-3" style="margin-bottom:24px">
         <div class="card">
           <div class="card-title">이번달 광고비</div>
@@ -368,30 +449,89 @@
         </div>
       </div>
 
-      <!-- 차트 -->
       <div class="grid-2">
         <div class="card">
           <div class="card-title">매출 vs 광고비 (30일)</div>
-          <div class="chart-container">
-            <canvas id="chart-revenue"></canvas>
-          </div>
+          <div class="chart-container"><canvas id="chart-revenue"></canvas></div>
         </div>
         <div class="card">
           <div class="card-title">ROAS 추이 (30일)</div>
-          <div class="chart-container">
-            <canvas id="chart-roas"></canvas>
-          </div>
+          <div class="chart-container"><canvas id="chart-roas"></canvas></div>
         </div>
       </div>
 
-      <!-- 최근 로그 -->
       <div class="card">
         <div class="card-title">
           최근 자동화 실행
           <button class="btn btn-sm btn-outline" onclick="showPage('logs')">전체 보기</button>
-
         </div>
         <div id="recent-logs"><div class="empty"><div class="empty-icon">🔄</div>로딩 중...</div></div>
+      </div>
+    </div>
+
+    <!-- ── 상품 검색 ── -->
+    <div id="page-search" class="page">
+      <div class="topbar">
+        <div>
+          <div class="page-title">상품 검색</div>
+          <div class="page-sub">1688에서 키워드로 상품을 찾고 스마트스토어에 등록하세요</div>
+        </div>
+      </div>
+
+      <!-- 검색창 -->
+      <div class="card" style="margin-bottom:20px">
+        <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
+          <div style="flex:1;min-width:200px">
+            <div class="form-label">검색 키워드</div>
+            <input class="form-input" id="search-keyword"
+              placeholder="예: 폼롤러, 강아지간식, 마스크팩..."
+              onkeydown="if(event.key==='Enter') doSearch(1)">
+          </div>
+          <div style="min-width:180px">
+            <div class="form-label">트렌드 키워드에서 선택</div>
+            <select class="form-input" id="trend-keyword-select"
+              onchange="if(this.value){document.getElementById('search-keyword').value=this.value;doSearch(1);}">
+              <option value="">-- 키워드 선택 --</option>
+            </select>
+          </div>
+          <button class="btn btn-primary" onclick="doSearch(1)" style="height:42px;padding:0 28px">
+            🔍 검색
+          </button>
+        </div>
+      </div>
+
+      <!-- 로딩 -->
+      <div id="search-loading" class="search-loading" style="display:none">
+        <div class="spinner"></div>
+        <div id="search-loading-text">1688에서 상품 검색 중...</div>
+      </div>
+
+      <!-- 결과 헤더 -->
+      <div id="search-result-header" style="display:none;justify-content:space-between;align-items:center;margin-bottom:14px">
+        <div style="font-size:13px;color:var(--muted)">
+          <strong style="color:var(--text)" id="search-result-count">0</strong>개 상품 검색됨
+          <span style="margin-left:8px;background:rgba(124,92,252,0.12);color:var(--accent);
+            font-size:11px;padding:2px 8px;border-radius:10px;font-family:var(--mono)">1688</span>
+          <span id="search-cache-badge" style="display:none;margin-left:6px;background:rgba(0,229,160,0.1);
+            color:var(--success);font-size:11px;padding:2px 8px;border-radius:10px">캐시</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <button class="btn btn-sm btn-outline" id="btn-prev" onclick="doSearch(currentPage-1)" disabled>← 이전</button>
+          <span id="page-indicator" style="font-size:12px;color:var(--muted);min-width:50px;text-align:center">1 페이지</span>
+          <button class="btn btn-sm btn-outline" id="btn-next" onclick="doSearch(currentPage+1)">다음 →</button>
+        </div>
+      </div>
+
+      <!-- 상품 그리드 -->
+      <div id="search-grid" class="product-grid"></div>
+
+      <!-- 빈 상태 -->
+      <div id="search-empty" class="empty" style="margin-top:60px">
+        <div class="empty-icon">🔍</div>
+        <div>키워드를 입력하고 검색해보세요</div>
+        <div style="margin-top:6px;font-size:12px">
+          트렌드 탭에서 수집된 키워드를 드롭다운에서 바로 선택할 수도 있어요
+        </div>
       </div>
     </div>
 
@@ -495,7 +635,7 @@
           <div class="page-title">자동화 로그</div>
           <div class="page-sub">Cron 작업 실행 기록</div>
         </div>
-        <div style="display:flex;gap:8px">
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
           <button class="btn btn-outline btn-sm" onclick="runJob('trend_collect')">🔍 트렌드 수집</button>
           <button class="btn btn-outline btn-sm" onclick="runJob('creative_gen')">✍️ 소재 생성</button>
           <button class="btn btn-outline btn-sm" onclick="runJob('ad_launch')">🚀 광고 집행</button>
@@ -549,30 +689,23 @@
           <div style="font-size:13px;line-height:2;color:var(--muted)">
             <div><strong style="color:var(--text)">1. 사전 준비</strong> — Cloudflare 계정 생성 (무료), Node.js 설치</div>
             <div style="background:var(--bg3);border-radius:8px;padding:12px;margin:8px 0;font-family:var(--mono);font-size:12px;color:var(--accent2)">
-              npm install -g wrangler<br>
-              wrangler login<br>
-              cd workers && npm install
+              npm install -g wrangler<br>wrangler login<br>cd workers && npm install
             </div>
             <div><strong style="color:var(--text)">2. D1 DB 생성</strong></div>
             <div style="background:var(--bg3);border-radius:8px;padding:12px;margin:8px 0;font-family:var(--mono);font-size:12px;color:var(--accent2)">
-              wrangler d1 create mobin-store-db<br>
-              wrangler kv:namespace create CACHE<br>
+              wrangler d1 create mobin-store-db<br>wrangler kv:namespace create CACHE<br>
               <span style="color:var(--muted)"># 출력된 id를 wrangler.toml에 복사</span>
             </div>
             <div><strong style="color:var(--text)">3. API 키 등록</strong></div>
             <div style="background:var(--bg3);border-radius:8px;padding:12px;margin:8px 0;font-family:var(--mono);font-size:12px;color:var(--accent2)">
-              wrangler secret put NAVER_CLIENT_ID<br>
-              wrangler secret put NAVER_CLIENT_SECRET<br>
-              wrangler secret put META_ACCESS_TOKEN<br>
-              wrangler secret put META_AD_ACCOUNT_ID<br>
-              wrangler secret put META_PAGE_ID<br>
-              wrangler secret put CLAUDE_API_KEY<br>
+              wrangler secret put NAVER_CLIENT_ID<br>wrangler secret put NAVER_CLIENT_SECRET<br>
+              wrangler secret put META_ACCESS_TOKEN<br>wrangler secret put META_AD_ACCOUNT_ID<br>
+              wrangler secret put META_PAGE_ID<br>wrangler secret put CLAUDE_API_KEY<br>
               wrangler secret put REMOVEBG_API_KEY
             </div>
             <div><strong style="color:var(--text)">4. 배포</strong></div>
             <div style="background:var(--bg3);border-radius:8px;padding:12px;margin:8px 0;font-family:var(--mono);font-size:12px;color:var(--accent2)">
-              wrangler d1 execute mobin-store-db --file=./schema.sql<br>
-              wrangler deploy<br>
+              wrangler d1 execute mobin-store-db --file=./schema.sql<br>wrangler deploy<br>
               <span style="color:var(--muted)"># 출력된 URL을 위 설정에 입력</span>
             </div>
             <div><strong style="color:var(--text)">5. Pages 배포</strong> — GitHub에 push 후 Cloudflare Pages에서 연결</div>
@@ -622,17 +755,19 @@
 let WORKER_URL = localStorage.getItem('mobin_worker_url') || '';
 let chartRevenue = null;
 let chartRoas = null;
+let currentPage = 1;
+let currentKeyword = '';
 
 // ─── Init ───
 const DEFAULT_WORKER_URL = 'https://mobin-store-worker.kyuhan-lee.workers.dev';
 document.addEventListener('DOMContentLoaded', () => {
-  // localStorage에 없으면 기본 Worker URL 자동 설정
   if (!WORKER_URL) {
     WORKER_URL = DEFAULT_WORKER_URL;
     localStorage.setItem('mobin_worker_url', WORKER_URL);
   }
   document.getElementById('setting-worker-url').value = WORKER_URL;
-  document.getElementById('worker-url-text').textContent = WORKER_URL.replace('https://', '').split('.')[0] + '...workers.dev';
+  document.getElementById('worker-url-text').textContent =
+    WORKER_URL.replace('https://', '').split('.')[0] + '...workers.dev';
   document.getElementById('config-notice').style.display = 'none';
   loadDashboard();
 });
@@ -642,7 +777,6 @@ function showPage(name, el) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   document.getElementById('page-' + name).classList.add('active');
-  // el이 있으면 (nav 클릭), 없으면 nav에서 해당 이름으로 찾아서 활성화
   const navEl = el || document.querySelector(`.nav-item[data-page="${name}"]`);
   if (navEl) navEl.classList.add('active');
 
@@ -650,6 +784,7 @@ function showPage(name, el) {
   if (name === 'campaigns') loadCampaigns();
   if (name === 'trends') loadTrends();
   if (name === 'logs') loadLogs();
+  if (name === 'search') initSearchPage();
 }
 
 // ─── API helper ───
@@ -657,11 +792,8 @@ async function api(path, options = {}) {
   if (!WORKER_URL) return null;
   try {
     const res = await fetch(WORKER_URL + path, options);
-    const contentType = res.headers.get('content-type') || '';
-    if (!contentType.includes('application/json')) {
-      console.error('API error: 응답이 JSON이 아닙니다. Worker URL을 확인하세요.', await res.text().then(t => t.slice(0, 100)));
-      return null;
-    }
+    const ct = res.headers.get('content-type') || '';
+    if (!ct.includes('application/json')) return null;
     return await res.json();
   } catch (e) {
     console.error('API error:', e);
@@ -677,11 +809,9 @@ async function loadDashboard() {
     document.getElementById('config-notice').style.display = 'flex';
     return;
   }
-
   document.getElementById('config-notice').style.display = 'none';
   document.getElementById('last-updated').textContent = '마지막 업데이트: ' + new Date().toLocaleString('ko-KR');
 
-  // 통계 카드
   const t = data.today || {};
   const m = data.month || {};
 
@@ -705,10 +835,7 @@ async function loadDashboard() {
   document.getElementById('month-revenue').textContent = won(m.revenue);
   document.getElementById('month-profit').textContent = won((m.revenue || 0) * 0.3 - (m.spend || 0));
 
-  // 로그
   renderLogs(data.logs || [], 'recent-logs', 5);
-
-  // 차트
   await loadCharts();
 }
 
@@ -724,27 +851,27 @@ async function loadCharts() {
   if (chartRevenue) chartRevenue.destroy();
   chartRevenue = new Chart(document.getElementById('chart-revenue'), {
     type: 'bar',
-    data: {
-      labels,
-      datasets: [
-        { label: '매출 (천원)', data: revenues, backgroundColor: 'rgba(0,229,160,0.5)', borderColor: '#00e5a0', borderWidth: 1 },
-        { label: '광고비 (천원)', data: spends, backgroundColor: 'rgba(124,92,252,0.5)', borderColor: '#7c5cfc', borderWidth: 1 },
-      ]
-    },
-    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#6b6b88', font: { size: 11 } } } }, scales: { x: { ticks: { color: '#6b6b88', font: { size: 10 } }, grid: { color: '#2a2a3a' } }, y: { ticks: { color: '#6b6b88', font: { size: 10 } }, grid: { color: '#2a2a3a' } } } }
+    data: { labels, datasets: [
+      { label: '매출 (천원)', data: revenues, backgroundColor: 'rgba(0,229,160,0.5)', borderColor: '#00e5a0', borderWidth: 1 },
+      { label: '광고비 (천원)', data: spends, backgroundColor: 'rgba(124,92,252,0.5)', borderColor: '#7c5cfc', borderWidth: 1 },
+    ]},
+    options: { responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: '#6b6b88', font: { size: 11 } } } },
+      scales: { x: { ticks: { color: '#6b6b88', font: { size: 10 } }, grid: { color: '#2a2a3a' } },
+                y: { ticks: { color: '#6b6b88', font: { size: 10 } }, grid: { color: '#2a2a3a' } } } }
   });
 
   if (chartRoas) chartRoas.destroy();
   chartRoas = new Chart(document.getElementById('chart-roas'), {
     type: 'line',
-    data: {
-      labels,
-      datasets: [
-        { label: 'ROAS', data: roasData, borderColor: '#ffd93d', backgroundColor: 'rgba(255,217,61,0.1)', fill: true, tension: 0.4, pointRadius: 3 },
-        { label: '목표 (200%)', data: Array(labels.length).fill(2), borderColor: '#ff6b6b', borderDash: [4, 4], borderWidth: 1, pointRadius: 0 },
-      ]
-    },
-    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#6b6b88', font: { size: 11 } } } }, scales: { x: { ticks: { color: '#6b6b88', font: { size: 10 } }, grid: { color: '#2a2a3a' } }, y: { ticks: { color: '#6b6b88', font: { size: 10 } }, grid: { color: '#2a2a3a' } } } }
+    data: { labels, datasets: [
+      { label: 'ROAS', data: roasData, borderColor: '#ffd93d', backgroundColor: 'rgba(255,217,61,0.1)', fill: true, tension: 0.4, pointRadius: 3 },
+      { label: '목표 (200%)', data: Array(labels.length).fill(2), borderColor: '#ff6b6b', borderDash: [4,4], borderWidth: 1, pointRadius: 0 },
+    ]},
+    options: { responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: '#6b6b88', font: { size: 11 } } } },
+      scales: { x: { ticks: { color: '#6b6b88', font: { size: 10 } }, grid: { color: '#2a2a3a' } },
+                y: { ticks: { color: '#6b6b88', font: { size: 10 } }, grid: { color: '#2a2a3a' } } } }
   });
 }
 
@@ -752,12 +879,19 @@ async function loadCharts() {
 async function loadProducts() {
   const data = await api('/api/products');
   if (!data) { document.getElementById('products-tbody').innerHTML = '<tr><td colspan="7" class="empty">Worker URL을 설정해주세요</td></tr>'; return; }
-
   if (!data.length) { document.getElementById('products-tbody').innerHTML = '<tr><td colspan="7" class="empty"><div class="empty-icon">📦</div>등록된 상품이 없습니다</td></tr>'; return; }
 
   document.getElementById('products-tbody').innerHTML = data.map(p => `
     <tr>
-      <td><div style="font-weight:500">${p.name}</div><div style="font-size:11px;color:var(--muted)">#${p.keyword}</div></td>
+      <td>
+        <div style="display:flex;align-items:center;gap:8px">
+          ${p.source_image ? `<img src="${p.source_image}" style="width:36px;height:36px;border-radius:6px;object-fit:cover;background:var(--bg3)" onerror="this.style.display='none'">` : ''}
+          <div>
+            <div style="font-weight:500">${p.name}</div>
+            <div style="font-size:11px;color:var(--muted)">#${p.keyword}</div>
+          </div>
+        </div>
+      </td>
       <td style="font-family:var(--mono)">${(p.monthly_search_volume || 0).toLocaleString()}</td>
       <td>${compLevel(p.competition_count)}</td>
       <td><span style="font-family:var(--mono);color:var(--accent)">${(p.score || 0).toFixed(1)}</span></td>
@@ -781,19 +915,18 @@ async function updateProductStatus(id, status) {
 async function loadCampaigns() {
   const data = await api('/api/campaigns');
   if (!data) { document.getElementById('campaigns-tbody').innerHTML = '<tr><td colspan="8" class="empty">Worker URL을 설정해주세요</td></tr>'; return; }
-
   if (!data.length) { document.getElementById('campaigns-tbody').innerHTML = '<tr><td colspan="8" class="empty"><div class="empty-icon">📢</div>실행 중인 광고가 없습니다</td></tr>'; return; }
 
   document.getElementById('campaigns-tbody').innerHTML = data.map(c => {
     const r = parseFloat(c.avg_roas || 0);
-    const roasClass = r >= 2 ? 'roas-high' : r >= 1.5 ? 'roas-mid' : 'roas-low';
+    const rc = r >= 2 ? 'roas-high' : r >= 1.5 ? 'roas-mid' : 'roas-low';
     return `<tr>
       <td><div style="font-weight:500">${c.product_name}</div><div style="font-size:11px;color:var(--muted)">#${c.keyword}</div></td>
       <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.headline}</td>
       <td style="font-family:var(--mono)">${won(c.daily_budget)}</td>
       <td style="font-family:var(--mono)">${won(c.total_spend)}</td>
       <td style="font-family:var(--mono);color:var(--accent2)">${won(c.total_revenue)}</td>
-      <td><span class="${roasClass}">${roas(c.avg_roas)}</span></td>
+      <td><span class="${rc}">${roas(c.avg_roas)}</span></td>
       <td>${badge(c.status)}</td>
       <td style="color:var(--muted);font-size:11px">${c.created_at?.slice(0, 10) || '—'}</td>
     </tr>`;
@@ -808,7 +941,9 @@ async function loadTrends() {
 
   document.getElementById('trends-tbody').innerHTML = data.map(k => `
     <tr>
-      <td style="font-weight:500">${k.keyword}</td>
+      <td style="font-weight:500">
+        <span style="cursor:pointer;color:var(--accent)" onclick="quickSearch('${k.keyword}')">${k.keyword}</span>
+      </td>
       <td style="color:var(--muted);font-size:12px">${k.category || '—'}</td>
       <td style="font-family:var(--mono)">${(k.search_volume || 0).toLocaleString()}</td>
       <td>${compLevel(k.competition_count)}</td>
@@ -819,9 +954,20 @@ async function loadTrends() {
         <span style="font-family:var(--mono);font-size:11px;color:var(--accent)">${(k.trend_score || 0).toFixed(1)}</span>
       </div></td>
       <td style="color:var(--muted);font-size:11px">${k.collected_at?.slice(0, 10) || '—'}</td>
-      <td>${k.processed ? '<span class="badge badge-success">✓ 등록됨</span>' : '<span class="badge badge-draft">미처리</span>'}</td>
+      <td>
+        ${k.processed
+          ? '<span class="badge badge-success">✓ 등록됨</span>'
+          : `<button class="btn btn-sm btn-outline" onclick="quickSearch('${k.keyword}')">검색하기</button>`}
+      </td>
     </tr>
   `).join('');
+}
+
+// 트렌드 키워드 클릭 → 바로 검색 탭으로 이동
+function quickSearch(keyword) {
+  showPage('search', document.querySelector('.nav-item[data-page="search"]'));
+  document.getElementById('search-keyword').value = keyword;
+  doSearch(1);
 }
 
 // ─── Logs ───
@@ -835,7 +981,6 @@ function renderLogs(logs, containerId, limit = 30) {
   if (!logs.length) { container.innerHTML = '<div class="empty"><div class="empty-icon">📋</div>로그가 없습니다</div>'; return; }
 
   const jobEmoji = { trend_collect: '🔍', creative_gen: '✍️', ad_launch: '🚀', metrics_collect: '📊', optimize: '⚡' };
-
   container.innerHTML = logs.slice(0, limit).map(log => `
     <div class="log-item">
       <span class="log-time">${log.started_at?.slice(5, 16) || '—'}</span>
@@ -849,31 +994,145 @@ function renderLogs(logs, containerId, limit = 30) {
   `).join('');
 }
 
-// ─── Manual Job Run ───
+// ─── 상품 검색 ───
+async function initSearchPage() {
+  // 트렌드 키워드 드롭다운 채우기
+  const data = await api('/api/trends');
+  if (!data) return;
+  const select = document.getElementById('trend-keyword-select');
+  select.innerHTML = '<option value="">-- 키워드 선택 --</option>';
+  data.slice(0, 30).forEach(k => {
+    const opt = document.createElement('option');
+    opt.value = k.keyword;
+    opt.textContent = `${k.keyword} (점수 ${(k.trend_score || 0).toFixed(0)})`;
+    select.appendChild(opt);
+  });
+}
+
+async function doSearch(page = 1) {
+  const keyword = document.getElementById('search-keyword').value.trim();
+  if (!keyword) { alert('키워드를 입력해주세요'); return; }
+  if (!WORKER_URL) { alert('설정에서 Worker URL을 먼저 입력해주세요'); showPage('settings'); return; }
+
+  currentKeyword = keyword;
+  currentPage = page;
+
+  // UI 초기화
+  document.getElementById('search-grid').innerHTML = '';
+  document.getElementById('search-empty').style.display = 'none';
+  document.getElementById('search-result-header').style.display = 'none';
+  document.getElementById('search-loading').style.display = 'block';
+  document.getElementById('search-loading-text').textContent = `"${keyword}" 1688에서 검색 중...`;
+
+  const data = await api(`/api/search/1688?keyword=${encodeURIComponent(keyword)}&page=${page}`);
+
+  document.getElementById('search-loading').style.display = 'none';
+
+  if (!data || !data.products?.length) {
+    document.getElementById('search-empty').style.display = 'block';
+    document.getElementById('search-empty').innerHTML = `
+      <div class="empty-icon">😅</div>
+      <div>"${keyword}" 검색 결과가 없어요</div>
+      <div style="margin-top:6px;font-size:12px">다른 키워드로 시도해보세요</div>`;
+    return;
+  }
+
+  // 결과 헤더
+  const header = document.getElementById('search-result-header');
+  header.style.display = 'flex';
+  document.getElementById('search-result-count').textContent = data.products.length;
+  document.getElementById('page-indicator').textContent = `${page} 페이지`;
+  document.getElementById('btn-prev').disabled = page <= 1;
+
+  // 캐시 표시
+  const cacheEl = document.getElementById('search-cache-badge');
+  // (Worker에서 X-Cache: HIT 헤더를 보내면 표시 가능 — 현재는 숨김)
+  cacheEl.style.display = 'none';
+
+  // 상품 카드 렌더링
+  document.getElementById('search-grid').innerHTML = data.products.map(p => `
+    <div class="product-card">
+      <div style="position:relative">
+        <img class="product-card-img" src="${p.image_url}" alt="${escHtml(p.title)}"
+          onerror="this.src='https://placehold.co/300x180/1a1a26/6b6b88?text=No+Image'">
+        <span class="source-badge">1688</span>
+      </div>
+      <div class="product-card-body">
+        <div class="product-card-title" title="${escHtml(p.title)}">${escHtml(p.title)}</div>
+        <div class="product-card-price">
+          ¥${p.price_min.toFixed(1)}
+          <span>(${p.price_min_krw.toLocaleString()}원~)</span>
+        </div>
+        <div style="display:flex;gap:12px;font-size:11px;color:var(--muted)">
+          <span>월 ${p.monthly_orders.toLocaleString()}건</span>
+          <span>★ ${p.rating}</span>
+          <span>${p.seller_name}</span>
+        </div>
+        <div class="product-card-meta">
+          <div class="product-card-meta-row">
+            <span style="color:var(--muted)">권장 판매가</span>
+            <span style="font-family:var(--mono);font-weight:600">${p.suggested_sell_price.toLocaleString()}원</span>
+          </div>
+          <div class="product-card-meta-row">
+            <span style="color:var(--muted)">예상 마진</span>
+            <span style="font-family:var(--mono);font-weight:600;color:${p.estimated_margin >= 50 ? 'var(--accent2)' : 'var(--accent4)'}">
+              ${p.estimated_margin}%
+            </span>
+          </div>
+        </div>
+        <div class="product-card-actions">
+          <a href="${p.detail_url}" target="_blank" rel="noopener"
+            class="btn btn-outline btn-sm" style="flex:1;justify-content:center">
+            상세보기
+          </a>
+          <button class="btn btn-primary btn-sm" style="flex:1"
+            onclick='registerProduct(${JSON.stringify(p).replace(/\\/g,"\\\\").replace(/'/g,"&#39;")})'>
+            + 등록
+          </button>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+async function registerProduct(p) {
+  if (!confirm(`"${p.title}"\n\n권장 판매가: ${p.suggested_sell_price.toLocaleString()}원\n예상 마진: ${p.estimated_margin}%\n\n스마트스토어 상품으로 등록할까요?`)) return;
+
+  const result = await api('/api/search/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(p),
+  });
+
+  if (result?.id) {
+    alert(`✅ 등록 완료!\n\n상품 관리 탭에서 스마트스토어 URL을 입력해주세요.\n그 후 AI 광고 소재가 자동 생성됩니다.`);
+  } else if (result?.error?.includes('이미 등록')) {
+    alert('이미 등록된 상품입니다');
+  } else {
+    alert('등록 실패: ' + (result?.error || '알 수 없는 오류'));
+  }
+}
+
+// ─── Job Run ───
 async function runJob(jobName) {
   if (!WORKER_URL) { alert('Worker URL을 먼저 설정해주세요'); return; }
   const result = await api(`/api/run/${jobName}`, { method: 'POST' });
-  if (result) { alert(`✅ ${jobName} 실행 시작!\n\n로그 탭에서 결과를 확인하세요.`); }
+  if (result) alert(`✅ ${jobName} 실행 시작!\n로그 탭에서 결과를 확인하세요.`);
 }
 
 // ─── Product Modal ───
-function openAddProduct() {
-  document.getElementById('modal-product').classList.add('open');
-}
-function closeModal(id) {
-  document.getElementById(id).classList.remove('open');
-}
+function openAddProduct() { document.getElementById('modal-product').classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
 async function submitProduct() {
   const name = document.getElementById('new-product-name').value.trim();
   const keyword = document.getElementById('new-product-keyword').value.trim();
   if (!name || !keyword) { alert('상품명과 키워드는 필수입니다'); return; }
-
   const result = await api('/api/products', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      name,
-      keyword,
+      name, keyword,
       smart_store_url: document.getElementById('new-product-url').value,
       price: parseInt(document.getElementById('new-product-price').value) || null,
       margin_rate: parseInt(document.getElementById('new-product-margin').value) || 30,
@@ -888,7 +1147,8 @@ async function saveSettings() {
   if (!url) return;
   WORKER_URL = url;
   localStorage.setItem('mobin_worker_url', url);
-  document.getElementById('worker-url-text').textContent = url.replace('https://', '').split('.')[0] + '...workers.dev';
+  document.getElementById('worker-url-text').textContent =
+    url.replace('https://', '').split('.')[0] + '...workers.dev';
 
   const statusEl = document.getElementById('connection-status');
   statusEl.style.display = 'block';
@@ -926,22 +1186,23 @@ function won(v) {
   if (v == null || v === '' || isNaN(v)) return '—';
   return Math.round(v).toLocaleString('ko-KR') + '원';
 }
-
 function roas(v) {
   if (v == null || isNaN(v)) return '—';
   return (parseFloat(v) * 100).toFixed(0) + '%';
 }
-
 function badge(status) {
-  const map = { active: '활성', paused: '일시정지', stopped: '중단', draft: '초안', approved: '승인', discovered: '발견', success: '성공', failed: '실패', running: '실행중' };
+  const map = { active:'활성', paused:'일시정지', stopped:'중단', draft:'초안',
+    approved:'승인', discovered:'발견', success:'성공', failed:'실패', running:'실행중' };
   return `<span class="badge badge-${status}"><span class="dot"></span>${map[status] || status}</span>`;
 }
-
 function compLevel(count) {
   if (!count) return '—';
   if (count < 200) return '<span style="color:var(--success);font-size:12px">● 낮음</span>';
   if (count < 600) return '<span style="color:var(--warning);font-size:12px">● 중간</span>';
   return '<span style="color:var(--danger);font-size:12px">● 높음</span>';
+}
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 </script>
 </body>
