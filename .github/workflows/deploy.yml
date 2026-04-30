@@ -40,6 +40,6 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          projectName: mobin-store-dashboard
+          projectName: mobin-store
           directory: pages/src
           gitHubToken: ${{ secrets.GITHUB_TOKEN }}
