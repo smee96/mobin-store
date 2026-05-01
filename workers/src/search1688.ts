@@ -6,8 +6,8 @@
 export interface Product1688 {
   id: string;
   title: string;
-  price_min: number;            // 최소 가격 (위안)
-  price_min_krw: number;        // 최소 가격 (원)
+  price_min: number;
+  price_min_krw: number;
   price_max: number;
   price_max_krw: number;
   image_url: string;
@@ -16,15 +16,19 @@ export interface Product1688 {
   monthly_orders: number;
   rating: number;
   keyword: string;
-  estimated_margin: number;     // 예상 마진율 (%)
-  suggested_sell_price: number; // 스마트스토어 권장 판매가 (원)
-  source: '1688' | 'aliexpress'; // 나중에 알리 추가 대비
+  estimated_margin: number;
+  suggested_sell_price: number;
+  source: '1688' | 'aliexpress';
 }
 
-// 환율 / 마진 상수
-const CNY_TO_KRW = 190;   // 1위안 ≈ 190원 (추후 환율 API 연동 가능)
-const MARKUP_RATE = 3.0;  // 원가의 3배로 판매
-const SHIPPING_EST = 3000; // 예상 배송비
+const CNY_TO_KRW = 190;
+const MARKUP_RATE = 3.0;
+const SHIPPING_EST = 3000;
+
+// 1688 실제 검색 결과 URL 생성
+function get1688SearchUrl(keyword: string): string {
+  return `https://s.1688.com/selloffer/offer_search.htm?keywords=${encodeURIComponent(keyword)}`;
+}
 
 // ─── 메인 검색 함수 ───
 export async function search1688(
@@ -32,7 +36,6 @@ export async function search1688(
   page = 1
 ): Promise<Product1688[]> {
   try {
-    // 1688 모바일 검색 API (파싱이 비교적 안정적)
     const url = `https://s.1688.com/selloffer/offer_search.htm?keywords=${encodeURIComponent(keyword)}&beginPage=${page}`;
 
     const res = await fetch(url, {
@@ -62,7 +65,6 @@ export async function search1688(
 function parse1688Response(html: string, keyword: string): Product1688[] {
   const products: Product1688[] = [];
 
-  // 1688은 __INIT_DATA__ 또는 window.DATA 형식으로 상품 JSON 제공
   const patterns = [
     /window\.__INIT_DATA__\s*=\s*({[\s\S]+?});\s*<\/script>/,
     /window\.DATA\s*=\s*({[\s\S]+?});\s*<\/script>/,
@@ -106,7 +108,6 @@ function itemToProduct(item: any, keyword: string): Product1688 | null {
   const priceMaxKrw = Math.round(priceMax * CNY_TO_KRW);
   const id = String(item?.offerId || item?.id || Math.random().toString(36).slice(2));
 
-  // 이미지 URL 정규화
   let imageUrl: string = item?.imgUrl || item?.image || '';
   if (imageUrl.startsWith('//')) imageUrl = `https:${imageUrl}`;
   if (!imageUrl) imageUrl = `https://placehold.co/300x300?text=${encodeURIComponent(keyword)}`;
@@ -116,6 +117,11 @@ function itemToProduct(item: any, keyword: string): Product1688 | null {
   const monthlyOrders = parseInt(item?.tradeCount || item?.soldCount || '0');
   const rating = parseFloat(item?.sellerInfo?.serviceScore || '4.5');
 
+  // 실제 상품 ID가 있으면 상품 상세 URL, 없으면 검색 결과 URL
+  const detailUrl = id && !id.startsWith('mock')
+    ? `https://detail.1688.com/offer/${id}.html`
+    : get1688SearchUrl(keyword);
+
   return {
     id,
     title,
@@ -124,7 +130,7 @@ function itemToProduct(item: any, keyword: string): Product1688 | null {
     price_max: priceMax,
     price_max_krw: priceMaxKrw,
     image_url: imageUrl,
-    detail_url: `https://detail.1688.com/offer/${id}.html`,
+    detail_url: detailUrl,
     seller_name: sellerName,
     monthly_orders: monthlyOrders,
     rating,
@@ -135,9 +141,7 @@ function itemToProduct(item: any, keyword: string): Product1688 | null {
   };
 }
 
-// ─── 가격 계산 헬퍼 ───
 function calcSellPrice(costKrw: number): number {
-  // 원가 × 3배 + 배송비, 100원 단위 반올림
   return Math.round((costKrw * MARKUP_RATE + SHIPPING_EST) / 100) * 100;
 }
 
@@ -146,16 +150,20 @@ function calcMargin(costKrw: number): number {
   return Math.round(((sell - costKrw - SHIPPING_EST) / sell) * 100);
 }
 
-// ─── 목업 데이터 (스크래핑 실패 시 / 개발 테스트용) ───
+// ─── 목업 데이터 ───
+// 스크래핑 실패 시 사용. 상세보기는 1688 실제 검색 결과 페이지로 연결
 function getMockProducts(keyword: string): Product1688[] {
   const mockItems = [
     { title: `${keyword} 프리미엄 세트`, price: 12.5, orders: 1243, rating: 4.8 },
-    { title: `${keyword} 베이직 A형`, price: 6.8,  orders: 3821, rating: 4.6 },
+    { title: `${keyword} 베이직 A형`,    price: 6.8,  orders: 3821, rating: 4.6 },
     { title: `${keyword} 고급형 패키지`, price: 25.0, orders: 587,  rating: 4.9 },
     { title: `${keyword} 가성비 모델`,   price: 3.5,  orders: 9102, rating: 4.3 },
-    { title: `${keyword} 신상 2024`,    price: 18.0, orders: 241,  rating: 4.7 },
-    { title: `${keyword} OEM 대량구매`, price: 8.0,  orders: 2304, rating: 4.5 },
+    { title: `${keyword} 신상 2024`,     price: 18.0, orders: 241,  rating: 4.7 },
+    { title: `${keyword} OEM 대량구매`,  price: 8.0,  orders: 2304, rating: 4.5 },
   ];
+
+  // 상세보기 → 1688 실제 검색 결과 페이지로 연결
+  const searchUrl = get1688SearchUrl(keyword);
 
   return mockItems.map((m, i) => {
     const priceMinKrw = Math.round(m.price * CNY_TO_KRW);
@@ -166,8 +174,8 @@ function getMockProducts(keyword: string): Product1688[] {
       price_min_krw: priceMinKrw,
       price_max: m.price * 1.3,
       price_max_krw: Math.round(m.price * 1.3 * CNY_TO_KRW),
-      image_url: `https://placehold.co/300x300/f0f0f0/333?text=${encodeURIComponent(m.title.slice(0, 8))}`,
-      detail_url: `https://detail.1688.com/offer/mock_${i}.html`,
+      image_url: `https://placehold.co/300x300/1a1a26/7c5cfc?text=${encodeURIComponent(keyword)}`,
+      detail_url: searchUrl,  // ← 1688 실제 검색 결과 페이지
       seller_name: `판매자_${i + 1}`,
       monthly_orders: m.orders,
       rating: m.rating,
