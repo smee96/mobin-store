@@ -9,9 +9,9 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
   :root {
-    --bg:#faf8f4;--bg2:#f2ede4;--bg3:#e8e0d0;--card:#ffffff;--border:#d8cfc0;
-    --accent:#6c47e8;--accent2:#00a372;--accent3:#e03030;--accent4:#d4900a;
-    --text:#2a2420;--muted:#8a7a68;--success:#00a372;--warning:#d4900a;--danger:#e03030;
+    --bg:#0a0a0f;--bg2:#111118;--bg3:#16161f;--card:#1a1a26;--border:#2a2a3a;
+    --accent:#7c5cfc;--accent2:#00e5a0;--accent3:#ff6b6b;--accent4:#ffd93d;
+    --text:#e8e8f0;--muted:#6b6b88;--success:#00e5a0;--warning:#ffd93d;--danger:#ff6b6b;
     --coupang:#e8393a;
     --font:'Pretendard',sans-serif;--mono:'Space Mono',monospace;
   }
@@ -23,8 +23,8 @@
   .logo-mark{font-family:var(--mono);font-size:18px;font-weight:700;color:var(--accent);letter-spacing:-1px;}
   .logo-sub{font-size:11px;color:var(--muted);margin-top:2px;letter-spacing:2px;text-transform:uppercase;}
   .nav-item{display:flex;align-items:center;gap:10px;padding:10px 24px;font-size:13px;color:var(--muted);cursor:pointer;transition:all 0.15s;border-left:2px solid transparent;}
-  .nav-item:hover{color:var(--text);background:rgba(108,71,232,0.06);}
-  .nav-item.active{color:var(--accent);border-left-color:var(--accent);background:rgba(108,71,232,0.08);}
+  .nav-item:hover{color:var(--text);background:rgba(124,92,252,0.06);}
+  .nav-item.active{color:var(--accent);border-left-color:var(--accent);background:rgba(124,92,252,0.08);}
   .nav-icon{font-size:16px;}
   .main{margin-left:220px;flex:1;padding:32px;}
   .page{display:none;}.page.active{display:block;}
@@ -55,9 +55,9 @@
   .table-wrap{overflow-x:auto;}
   table{width:100%;border-collapse:collapse;font-size:13px;}
   th{text-align:left;padding:10px 12px;font-size:11px;font-weight:500;color:var(--muted);border-bottom:1px solid var(--border);letter-spacing:0.5px;text-transform:uppercase;}
-  td{padding:12px;border-bottom:1px solid rgba(180,160,130,0.25);}
+  td{padding:12px;border-bottom:1px solid rgba(42,42,58,0.5);}
   tr:last-child td{border-bottom:none;}
-  tr:hover td{background:rgba(108,71,232,0.04);}
+  tr:hover td{background:rgba(124,92,252,0.03);}
   .badge{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:20px;font-size:11px;font-weight:500;}
   .badge-active{background:rgba(0,229,160,0.1);color:var(--success);}
   .badge-paused{background:rgba(255,217,61,0.1);color:var(--warning);}
@@ -82,13 +82,13 @@
   .form-input{width:100%;padding:10px 14px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--mono);font-size:13px;transition:border-color 0.15s;}
   .form-input:focus{outline:none;border-color:var(--accent);}
   .form-input::placeholder{color:var(--muted);}
-  .log-item{display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:1px solid rgba(180,160,130,0.3);font-size:12px;}
+  .log-item{display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:1px solid rgba(42,42,58,0.4);font-size:12px;}
   .log-item:last-child{border-bottom:none;}
   .log-time{color:var(--muted);font-family:var(--mono);white-space:nowrap;}
   .log-msg{flex:1;color:var(--text);line-height:1.5;}
   .empty{text-align:center;padding:40px;color:var(--muted);font-size:13px;}
   .empty-icon{font-size:32px;margin-bottom:8px;}
-  .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.3);display:none;align-items:center;justify-content:center;z-index:100;backdrop-filter:blur(4px);}
+  .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.7);display:none;align-items:center;justify-content:center;z-index:100;backdrop-filter:blur(4px);}
   .modal-overlay.open{display:flex;}
   .modal{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:28px;width:480px;max-width:90vw;}
   .modal-title{font-size:16px;font-weight:600;margin-bottom:20px;}
@@ -384,14 +384,14 @@ async function loadCharts() {
   const roasData = data.map(d=>parseFloat((d.roas||0).toFixed(2)));
   if (chartRevenue) chartRevenue.destroy();
   chartRevenue = new Chart(document.getElementById('chart-revenue'), { type:'bar', data:{ labels, datasets:[
-    {label:'매출 (천원)',data:revenues,backgroundColor:'rgba(0,163,114,0.5)',borderColor:'#00a372',borderWidth:1},
-    {label:'광고비 (천원)',data:spends,backgroundColor:'rgba(108,71,232,0.5)',borderColor:'#6c47e8',borderWidth:1},
-  ]}, options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#8a7a68',font:{size:11}}}},scales:{x:{ticks:{color:'#8a7a68',font:{size:10}},grid:{color:'#e8e0d0'}},y:{ticks:{color:'#8a7a68',font:{size:10}},grid:{color:'#e8e0d0'}}}}});
+    {label:'매출 (천원)',data:revenues,backgroundColor:'rgba(0,229,160,0.5)',borderColor:'#00e5a0',borderWidth:1},
+    {label:'광고비 (천원)',data:spends,backgroundColor:'rgba(124,92,252,0.5)',borderColor:'#7c5cfc',borderWidth:1},
+  ]}, options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#6b6b88',font:{size:11}}}},scales:{x:{ticks:{color:'#6b6b88',font:{size:10}},grid:{color:'#2a2a3a'}},y:{ticks:{color:'#6b6b88',font:{size:10}},grid:{color:'#2a2a3a'}}}}});
   if (chartRoas) chartRoas.destroy();
   chartRoas = new Chart(document.getElementById('chart-roas'), { type:'line', data:{ labels, datasets:[
-    {label:'ROAS',data:roasData,borderColor:'#d4900a',backgroundColor:'rgba(212,144,10,0.08)',fill:true,tension:0.4,pointRadius:3},
-    {label:'목표 (200%)',data:Array(labels.length).fill(2),borderColor:'#e03030',borderDash:[4,4],borderWidth:1,pointRadius:0},
-  ]}, options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#8a7a68',font:{size:11}}}},scales:{x:{ticks:{color:'#8a7a68',font:{size:10}},grid:{color:'#e8e0d0'}},y:{ticks:{color:'#8a7a68',font:{size:10}},grid:{color:'#e8e0d0'}}}}});
+    {label:'ROAS',data:roasData,borderColor:'#ffd93d',backgroundColor:'rgba(255,217,61,0.1)',fill:true,tension:0.4,pointRadius:3},
+    {label:'목표 (200%)',data:Array(labels.length).fill(2),borderColor:'#ff6b6b',borderDash:[4,4],borderWidth:1,pointRadius:0},
+  ]}, options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#6b6b88',font:{size:11}}}},scales:{x:{ticks:{color:'#6b6b88',font:{size:10}},grid:{color:'#2a2a3a'}},y:{ticks:{color:'#6b6b88',font:{size:10}},grid:{color:'#2a2a3a'}}}}});
 }
 
 // ─── Products ───

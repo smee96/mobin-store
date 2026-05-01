@@ -1,6 +1,7 @@
 import { Env } from './types';
 import { handleScheduled } from './scheduler';
 import { search1688 } from './search1688';
+import { registerCoupangProduct, getCoupangProduct, convertToCoupangProduct } from './coupang';
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -26,7 +27,76 @@ export default {
     try {
 
       // ══════════════════════════════════════════
-      // 상품 검색 API (신규)
+      // 쿠팡 API (신규)
+      // ══════════════════════════════════════════
+
+      // POST /api/coupang/register - 쿠팡 상품 자동 등록
+      if (path === '/api/coupang/register' && request.method === 'POST') {
+        const body = await request.json() as any;
+        const { title, keyword, suggested_sell_price, image_url, detail_url, product_id } = body;
+
+        if (!title || !keyword) return json({ error: 'title, keyword 필수' }, 400);
+
+        // 1688 상품 → 쿠팡 상품 형식 변환
+        const coupangProduct = convertToCoupangProduct(env, {
+          title,
+          keyword,
+          suggested_sell_price: suggested_sell_price || 20000,
+          image_url: image_url || '',
+          detail_url: detail_url || '',
+        });
+
+        // 쿠팡 API로 상품 등록
+        const result = await registerCoupangProduct(env, coupangProduct);
+
+        if (result.success && result.productId) {
+          const coupangUrl = `https://www.coupang.com/vp/products/${result.productId}`;
+
+          // DB products 테이블 업데이트 (쿠팡 상품 ID 저장)
+          if (product_id) {
+            await env.DB.prepare(
+              `UPDATE products SET
+                coupang_product_id = ?,
+                coupang_url = ?,
+                status = 'active',
+                updated_at = datetime('now')
+               WHERE id = ?`
+            ).bind(result.productId, coupangUrl, product_id).run();
+          } else {
+            // 새 상품으로 DB 등록
+            await env.DB.prepare(
+              `INSERT INTO products
+                (name, keyword, coupang_product_id, coupang_url, price, margin_rate, source_url, source_image, status, score)
+               VALUES (?, ?, ?, ?, ?, 60, ?, ?, 'active', 50)`
+            ).bind(
+              title, keyword,
+              result.productId, coupangUrl,
+              suggested_sell_price,
+              detail_url, image_url
+            ).run();
+          }
+
+          return json({
+            success: true,
+            productId: result.productId,
+            coupangUrl,
+            message: '쿠팡에 상품이 등록되었습니다!',
+          }, 201);
+        } else {
+          return json({ success: false, error: result.error }, 400);
+        }
+      }
+
+      // GET /api/coupang/product/:id - 쿠팡 상품 조회
+      if (path.match(/^\/api\/coupang\/product\/\d+$/) && request.method === 'GET') {
+        const productId = parseInt(path.split('/').pop()!);
+        const product = await getCoupangProduct(env, productId);
+        if (!product) return json({ error: '상품을 찾을 수 없습니다' }, 404);
+        return json(product);
+      }
+
+      // ══════════════════════════════════════════
+      // 1688 상품 검색 API
       // ══════════════════════════════════════════
 
       // GET /api/search/1688?keyword=폼롤러&page=1
@@ -36,7 +106,6 @@ export default {
 
         if (!keyword) return json({ error: 'keyword 파라미터가 필요합니다' }, 400);
 
-        // KV 캐시 확인 (같은 키워드 1시간 캐시)
         const cacheKey = `search1688:${keyword}:${page}`;
         const cached = await env.CACHE.get(cacheKey);
         if (cached) {
@@ -46,8 +115,6 @@ export default {
         }
 
         const products = await search1688(keyword, page);
-
-        // 결과 캐시 저장 (1시간)
         const resultJson = JSON.stringify({ products, keyword, page, total: products.length });
         await env.CACHE.put(cacheKey, resultJson, { expirationTtl: 3600 });
 
@@ -56,17 +123,13 @@ export default {
         });
       }
 
-      // POST /api/search/register - 검색한 상품을 스마트스토어 상품으로 등록
+      // POST /api/search/register - 검색 상품을 DB에만 등록 (쿠팡 등록은 별도)
       if (path === '/api/search/register' && request.method === 'POST') {
         const body = await request.json() as any;
-        const {
-          title, keyword, price_min_krw, suggested_sell_price,
-          image_url, detail_url, source, estimated_margin
-        } = body;
+        const { title, keyword, price_min_krw, suggested_sell_price, image_url, detail_url, estimated_margin } = body;
 
         if (!title || !keyword) return json({ error: 'title, keyword 필수' }, 400);
 
-        // 이미 등록된 상품인지 확인
         const existing = await env.DB.prepare(
           `SELECT id FROM products WHERE keyword = ? AND source_url = ?`
         ).bind(keyword, detail_url || '').first();
@@ -75,26 +138,26 @@ export default {
 
         const result = await env.DB.prepare(
           `INSERT INTO products
-            (name, keyword, smart_store_url, price, margin_rate, source_url, source_image, status, score)
-           VALUES (?, ?, ?, ?, ?, ?, ?, 'active', 50)`
+            (name, keyword, price, margin_rate, source_url, source_image, status, score)
+           VALUES (?, ?, ?, ?, ?, ?, 'pending', 50)`
         ).bind(
-          title,
-          keyword,
-          '',                          // 스마트스토어 URL은 등록 후 업데이트
+          title, keyword,
           suggested_sell_price || price_min_krw * 3,
           estimated_margin || 60,
           detail_url || '',
           image_url || '',
         ).run();
 
-        return json({ id: result.meta.last_row_id, message: '상품이 등록되었습니다! 광고 소재 생성 후 광고가 집행됩니다.' }, 201);
+        return json({
+          id: result.meta.last_row_id,
+          message: '상품이 저장되었습니다. 쿠팡 등록 버튼을 눌러 쿠팡에 등록하세요.',
+        }, 201);
       }
 
       // ══════════════════════════════════════════
-      // 기존 API (변경 없음)
+      // 기존 API
       // ══════════════════════════════════════════
 
-      // GET /api/dashboard
       if (path === '/api/dashboard' && request.method === 'GET') {
         const today = new Date().toISOString().split('T')[0];
         const thirtyDaysAgo = new Date();
@@ -128,7 +191,6 @@ export default {
         });
       }
 
-      // GET /api/products
       if (path === '/api/products' && request.method === 'GET') {
         const status = url.searchParams.get('status');
         const limit = parseInt(url.searchParams.get('limit') || '20');
@@ -141,7 +203,6 @@ export default {
         return json(result.results);
       }
 
-      // POST /api/products
       if (path === '/api/products' && request.method === 'POST') {
         const body = await request.json() as any;
         const result = await env.DB.prepare(
@@ -151,7 +212,6 @@ export default {
         return json({ id: result.meta.last_row_id, message: '상품이 등록되었습니다' }, 201);
       }
 
-      // PUT /api/products/:id
       if (path.match(/^\/api\/products\/\d+$/) && request.method === 'PUT') {
         const id = path.split('/').pop();
         const body = await request.json() as any;
@@ -161,7 +221,6 @@ export default {
         return json({ message: '업데이트 완료' });
       }
 
-      // GET /api/campaigns
       if (path === '/api/campaigns' && request.method === 'GET') {
         const result = await env.DB.prepare(
           `SELECT c.*, p.name as product_name, p.keyword,
@@ -177,7 +236,6 @@ export default {
         return json(result.results);
       }
 
-      // GET /api/metrics/chart
       if (path === '/api/metrics/chart' && request.method === 'GET') {
         const days = parseInt(url.searchParams.get('days') || '30');
         const since = new Date();
@@ -191,7 +249,6 @@ export default {
         return json(result.results);
       }
 
-      // GET /api/trends
       if (path === '/api/trends' && request.method === 'GET') {
         const result = await env.DB.prepare(
           `SELECT * FROM trend_keywords ORDER BY trend_score DESC LIMIT 50`
@@ -199,7 +256,6 @@ export default {
         return json(result.results);
       }
 
-      // POST /api/run/:job
       if (path.match(/^\/api\/run\/.+$/) && request.method === 'POST') {
         const jobName = path.split('/').pop();
         if (!jobName) return json({ error: 'job name required' }, 400);
@@ -212,7 +268,6 @@ export default {
         }
       }
 
-      // GET /api/logs
       if (path === '/api/logs' && request.method === 'GET') {
         const result = await env.DB.prepare(
           `SELECT * FROM automation_logs ORDER BY started_at DESC LIMIT 30`

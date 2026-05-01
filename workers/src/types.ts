@@ -11,6 +11,10 @@ export interface Env {
   META_PAGE_ID: string;
   CLAUDE_API_KEY: string;
   REMOVEBG_API_KEY: string;
+  // 쿠팡 API (신규)
+  COUPANG_ACCESS_KEY: string;
+  COUPANG_SECRET_KEY: string;
+  COUPANG_VENDOR_ID: string;
   // Vars
   SMART_STORE_URL: string;
   MIN_ROAS: string;
@@ -23,12 +27,17 @@ export interface Product {
   name: string;
   keyword: string;
   smart_store_url?: string;
+  coupang_product_id?: number;      // 쿠팡 상품 ID (신규)
+  coupang_vendor_item_id?: number;  // 쿠팡 벤더 아이템 ID (신규)
+  coupang_url?: string;             // 쿠팡 상품 URL (신규)
   price?: number;
   margin_rate?: number;
   monthly_search_volume?: number;
   competition_count?: number;
   score?: number;
   status?: string;
+  source_url?: string;
+  source_image?: string;
 }
 
 export interface AdCreative {
@@ -58,7 +67,7 @@ export interface Campaign {
 export interface MetaTargeting {
   age_min: number;
   age_max: number;
-  genders?: number[]; // 1=남성, 2=여성
+  genders?: number[];
   interests?: { id: string; name: string }[];
   geo_locations: { countries: string[] };
 }
