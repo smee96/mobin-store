@@ -1,22 +1,17 @@
-// ─────────────────────────────────────────────────────────────
-// 쿠팡 파트너스 API 연동 모듈
-// 상품 자동 등록 / 조회 / 가격 수정
-// ─────────────────────────────────────────────────────────────
-
 import { Env } from './types';
 
 export interface CoupangProduct {
   vendorId: string;
-  vendorItemName: string;           // 상품명
-  originalPrice: number;            // 정가
-  salePrice: number;                // 판매가
-  unitCount: number;                // 수량 (무재고: 999)
+  vendorItemName: string;
+  originalPrice: number;
+  salePrice: number;
   stockQuantity: number;
-  images: string[];                 // 상품 이미지 URL 배열
-  description: string;              // 상품 상세 설명
-  categoryId: number;               // 쿠팡 카테고리 ID
-  keyword: string;                  // 검색 키워드
-  sourceUrl: string;                // 1688/알리 원본 URL
+  images: string[];
+  description: string;
+  categoryId: number;
+  keyword: string;
+  sourceUrl: string;
+  shippingFee?: number;
 }
 
 export interface CoupangRegisteredProduct {
@@ -28,12 +23,20 @@ export interface CoupangRegisteredProduct {
   productUrl: string;
 }
 
-// ─── HMAC-SHA256 서명 생성 ───
-async function generateHmacSignature(
+// ─── 쿠팡 공식 HMAC-SHA256 서명 생성 ───
+// 참고: https://developers.coupang.com/ko/auth
+async function generateCoupangSignature(
   secretKey: string,
-  message: string
+  method: string,
+  path: string,
+  datetime: string
 ): Promise<string> {
+  // 쿠팡 서명 메시지 형식: datetime + method + path
+  const message = `${datetime}${method}${path}`;
+
   const encoder = new TextEncoder();
+
+  // Secret Key를 그대로 UTF-8로 인코딩 (hex decode 안 함)
   const keyData = encoder.encode(secretKey);
   const messageData = encoder.encode(message);
 
@@ -46,25 +49,36 @@ async function generateHmacSignature(
   );
 
   const signature = await crypto.subtle.sign('HMAC', cryptoKey, messageData);
+
+  // hex 인코딩으로 반환
   return Array.from(new Uint8Array(signature))
     .map(b => b.toString(16).padStart(2, '0'))
     .join('');
 }
 
-// ─── 쿠팡 API 인증 헤더 생성 ───
+// ─── 쿠팡 API 인증 헤더 ───
 async function getCoupangHeaders(
   env: Env,
   method: string,
-  path: string,
-  query = ''
+  path: string
 ): Promise<Record<string, string>> {
-  const datetime = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
-  const message = `${datetime}${method}${path}${query}`;
-  const signature = await generateHmacSignature(env.COUPANG_SECRET_KEY, message);
+  const datetime = new Date().toISOString()
+    .replace(/\.\d{3}Z$/, 'Z')
+    .replace(/[-:]/g, '')
+    .replace('T', 'T');
+
+  const signature = await generateCoupangSignature(
+    env.COUPANG_SECRET_KEY,
+    method,
+    path,
+    datetime
+  );
+
+  const authorization = `CEA algorithm=HmacSHA256, access-key=${env.COUPANG_ACCESS_KEY}, signed-date=${datetime}, signature=${signature}`;
 
   return {
     'Content-Type': 'application/json;charset=UTF-8',
-    'Authorization': `CEA algorithm=HmacSHA256, access-key=${env.COUPANG_ACCESS_KEY}, signed-date=${datetime}, signature=${signature}`,
+    'Authorization': authorization,
   };
 }
 
@@ -77,44 +91,53 @@ export async function registerCoupangProduct(
 ): Promise<{ success: boolean; productId?: number; error?: string }> {
   const path = `/v2/providers/seller_api/apis/api/v1/marketplace/seller-products`;
 
-  // 쿠팡 상품 등록 페이로드
+  const shippingFee = product.shippingFee ?? 0;
+
   const payload = {
-    vendorId: env.COUPANG_VENDOR_ID,
+    displayCategoryCode: product.categoryId,
     sellerProductName: product.vendorItemName,
-    vendorUserId: env.COUPANG_VENDOR_ID,
+    vendorId: env.COUPANG_VENDOR_ID,
     saleStartedAt: new Date().toISOString().split('T')[0] + 'T00:00:00',
     saleEndedAt: '2099-12-31T00:00:00',
-    displayCategoryCode: product.categoryId,
+    vendorUserId: env.COUPANG_VENDOR_ID,
     productType: 1,
+    returnCenterCode: '',
+    outboundShippingTimeDay: 3,
+    unionDeliveryType: 'UNION_DELIVERY',
+    deliveryMethod: 'PARCEL',
+    deliveryCompanyCode: 'CJGLS',
+    deliveryChargeType: shippingFee === 0 ? 'FREE' : 'NOT_FREE',
+    deliveryCharge: shippingFee,
+    freeShipOverAmount: shippingFee === 0 ? 0 : 50000,
+    returnCharge: 5000,
+    returnChargeName: '반품 배송비',
+    pccNeeded: false,
     items: [
       {
         itemName: product.vendorItemName,
         originalPrice: product.originalPrice,
         salePrice: product.salePrice,
-        unitCount: product.unitCount || 1,
-        stockQuantity: product.stockQuantity || 999,
         maximumBuyCount: 999,
         maximumBuyForPerson: 999,
+        unitCount: 1,
+        stockQuantity: product.stockQuantity || 999,
         outboundShippingTimeDay: 3,
-        images: product.images.slice(0, 10).map((url, i) => ({
+        images: product.images.filter(Boolean).slice(0, 10).map((url, i) => ({
           imageType: i === 0 ? 'REPRESENTATION' : 'DETAIL',
           cdnPath: url,
           vendorPath: url,
         })),
         notices: [],
         attributes: [],
-        contents: [
-          {
-            contentsType: 'TEXT',
-            contentDetails: [
-              {
-                content: product.description,
-                detailType: 'TEXT',
-              }
-            ]
-          }
-        ],
+        contents: [{
+          contentsType: 'TEXT',
+          contentDetails: [{
+            content: product.description,
+            detailType: 'TEXT',
+          }],
+        }],
         searchTags: [product.keyword],
+        certifications: [],
       }
     ],
     requiredDocuments: [],
@@ -122,26 +145,34 @@ export async function registerCoupangProduct(
 
   try {
     const headers = await getCoupangHeaders(env, 'POST', path);
+
     const response = await fetch(`${COUPANG_BASE}${path}`, {
       method: 'POST',
       headers,
       body: JSON.stringify(payload),
     });
 
-    const data = await response.json() as any;
+    const responseText = await response.text();
+    console.log('쿠팡 API 응답 status:', response.status);
+    console.log('쿠팡 API 응답 텍스트:', responseText.slice(0, 500));
+
+    let data: any;
+    try {
+      data = JSON.parse(responseText);
+    } catch {
+      return { success: false, error: `쿠팡 API 응답 오류 (${response.status}): ${responseText.slice(0, 200)}` };
+    }
 
     if (response.ok && data.code === 'SUCCESS') {
-      return {
-        success: true,
-        productId: data.data?.productId,
-      };
+      return { success: true, productId: data.data?.productId };
     } else {
       return {
         success: false,
-        error: data.message || `쿠팡 API 오류: ${response.status}`,
+        error: data.message || data.code || `HTTP ${response.status}`,
       };
     }
   } catch (e: any) {
+    console.error('registerCoupangProduct error:', e);
     return { success: false, error: e.message };
   }
 }
@@ -152,17 +183,11 @@ export async function getCoupangProduct(
   productId: number
 ): Promise<CoupangRegisteredProduct | null> {
   const path = `/v2/providers/seller_api/apis/api/v1/marketplace/seller-products/${productId}`;
-
   try {
     const headers = await getCoupangHeaders(env, 'GET', path);
-    const response = await fetch(`${COUPANG_BASE}${path}`, {
-      method: 'GET',
-      headers,
-    });
-
+    const response = await fetch(`${COUPANG_BASE}${path}`, { method: 'GET', headers });
     const data = await response.json() as any;
     if (!response.ok || data.code !== 'SUCCESS') return null;
-
     const item = data.data?.items?.[0];
     return {
       productId: data.data.productId,
@@ -172,69 +197,10 @@ export async function getCoupangProduct(
       status: data.data.statusName,
       productUrl: `https://www.coupang.com/vp/products/${productId}`,
     };
-  } catch {
-    return null;
-  }
+  } catch { return null; }
 }
 
-// ─── 가격 수정 ───
-export async function updateCoupangPrice(
-  env: Env,
-  productId: number,
-  vendorItemId: number,
-  newPrice: number
-): Promise<boolean> {
-  const path = `/v2/providers/seller_api/apis/api/v1/marketplace/seller-products/${productId}/items/${vendorItemId}/prices`;
-
-  try {
-    const headers = await getCoupangHeaders(env, 'PUT', path);
-    const response = await fetch(`${COUPANG_BASE}${path}`, {
-      method: 'PUT',
-      headers,
-      body: JSON.stringify({ originalPrice: Math.round(newPrice * 1.1), salePrice: newPrice }),
-    });
-
-    const data = await response.json() as any;
-    return data.code === 'SUCCESS';
-  } catch {
-    return false;
-  }
-}
-
-// ─── 카테고리 ID 추정 (키워드 기반) ───
-export function guessCategoryId(keyword: string): number {
-  const keyword_lower = keyword.toLowerCase();
-
-  const categoryMap: Record<string, number> = {
-    '패션': 15760014,
-    '옷': 15760014,
-    '의류': 15760014,
-    '화장품': 15760004,
-    '스킨': 15760004,
-    '마스크팩': 15760004,
-    '운동': 15760029,
-    '헬스': 15760029,
-    '스포츠': 15760029,
-    '반려동물': 15760044,
-    '강아지': 15760044,
-    '고양이': 15760044,
-    '주방': 15760001,
-    '식품': 15760027,
-    '건강': 15760026,
-    '생활': 15760001,
-    '청소': 15760001,
-    '육아': 15760010,
-    '아기': 15760010,
-  };
-
-  for (const [key, id] of Object.entries(categoryMap)) {
-    if (keyword_lower.includes(key)) return id;
-  }
-
-  return 15760001; // 기본: 생활용품
-}
-
-// ─── 1688 상품 → 쿠팡 상품 변환 ───
+// ─── 1688/알리 상품 → 쿠팡 상품 변환 ───
 export function convertToCoupangProduct(
   env: Env,
   source: {
@@ -243,22 +209,44 @@ export function convertToCoupangProduct(
     suggested_sell_price: number;
     image_url: string;
     detail_url: string;
+    shipping_fee?: number;
+    margin_rate?: number;
   }
 ): CoupangProduct {
   const salePrice = source.suggested_sell_price;
-  const originalPrice = Math.round(salePrice * 1.2); // 정가는 판매가의 120%
+  const originalPrice = Math.round(salePrice * 1.2);
 
   return {
     vendorId: env.COUPANG_VENDOR_ID,
     vendorItemName: source.title,
     originalPrice,
     salePrice,
-    unitCount: 1,
-    stockQuantity: 999, // 무재고 위탁판매
-    images: [source.image_url],
-    description: `${source.title}\n\n✅ 빠른 배송\n✅ 품질 보장\n✅ 고객 만족 A/S`,
+    stockQuantity: 999,
+    images: [source.image_url].filter(Boolean),
+    description: `${source.title}\n\n✅ 빠른 배송\n✅ 품질 보장\n✅ 고객 만족 A/S\n\n원산지: 중국\n배송: 해외직구 (7-20일 소요)`,
     categoryId: guessCategoryId(source.keyword),
     keyword: source.keyword,
     sourceUrl: source.detail_url,
+    shippingFee: source.shipping_fee ?? 0,
   };
+}
+
+// ─── 카테고리 ID 추정 ───
+export function guessCategoryId(keyword: string): number {
+  const kw = keyword.toLowerCase();
+  const map: Record<string, number> = {
+    '패션': 15760014, '옷': 15760014, '의류': 15760014,
+    '화장품': 15760004, '스킨': 15760004, '마스크팩': 15760004, '세럼': 15760004,
+    '운동': 15760029, '헬스': 15760029, '스포츠': 15760029, '요가': 15760029,
+    '반려동물': 15760044, '강아지': 15760044, '고양이': 15760044,
+    '주방': 15760001, '조리': 15760001,
+    '식품': 15760027, '건강식품': 15760026, '비타민': 15760026,
+    '육아': 15760010, '아기': 15760010, '유아': 15760010,
+    '족욕': 15760001, '안마': 15760001, '마사지': 15760001,
+    '청소': 15760001, '생활': 15760001,
+  };
+  for (const [key, id] of Object.entries(map)) {
+    if (kw.includes(key)) return id;
+  }
+  return 15760001;
 }

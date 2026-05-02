@@ -1,8 +1,3 @@
-// ─────────────────────────────────────────────────────────────
-// 알리익스프레스 상품 검색 모듈
-// RapidAPI - AliExpress Datahub API 사용
-// ─────────────────────────────────────────────────────────────
-
 export interface Product1688 {
   id: string;
   title: string;
@@ -40,6 +35,9 @@ export async function search1688(
       q: keyword,
       page: String(page),
       sort: 'BEST_MATCH',
+      region: 'KR',
+      shipToCountry: 'KR',
+      language: 'ko',
       locale: 'ko_KR',
       currency: 'USD',
     });
@@ -60,10 +58,7 @@ export async function search1688(
     }
 
     const data = await res.json() as any;
-    const items =
-      data?.result?.resultList ||
-      data?.items ||
-      data?.data?.items || [];
+    const items = data?.result?.resultList || data?.items || data?.data?.items || [];
 
     if (!items.length) return getMockProducts(keyword);
 
@@ -78,45 +73,43 @@ export async function search1688(
   }
 }
 
+function toHttps(url: string): string {
+  if (!url) return '';
+  if (url.startsWith('//')) return `https:${url}`;
+  if (url.startsWith('http://')) return url.replace('http://', 'https://');
+  return url;
+}
+
 function parseAliItem(item: any, keyword: string): Product1688 | null {
-  const itemInfo = item?.item || item;
+  // API 응답 구조: { item: { itemId, title, image, sku, sales, averageStarRate }, ... }
+  const info = item?.item || item;
 
-  const priceRaw =
-    itemInfo?.sku?.def?.promotionPrice ||
-    itemInfo?.sku?.def?.price ||
-    itemInfo?.prices?.salePrice?.minPrice ||
-    itemInfo?.salePrice ||
-    itemInfo?.price || '0';
-
-  const priceUsd = parseFloat(String(priceRaw).replace(/[^\d.]/g, ''));
+  // 가격: sku.def.promotionPrice 우선, 없으면 price
+  const promoPrice = parseFloat(String(info?.sku?.def?.promotionPrice || '0'));
+  const basePrice = parseFloat(String(info?.sku?.def?.price || '0'));
+  const priceUsd = promoPrice > 0 ? promoPrice : basePrice;
   if (!priceUsd || priceUsd <= 0) return null;
 
   const priceKrw = Math.round(priceUsd * USD_TO_KRW);
-  const id = String(itemInfo?.itemId || itemInfo?.productId || itemInfo?.id || Math.random().toString(36).slice(2));
+  const id = String(info?.itemId || info?.productId || Math.random().toString(36).slice(2));
 
-  let imageUrl: string =
-    itemInfo?.image?.imgUrl ||
-    itemInfo?.images?.[0] ||
-    itemInfo?.mainImage ||
-    itemInfo?.imageUrl || '';
-  if (imageUrl.startsWith('//')) imageUrl = `https:${imageUrl}`;
+  // 이미지: item.image 는 문자열 (//ae-pic... 형태)
+  const imageUrl = toHttps(info?.image || '');
 
-  const title: string =
-    itemInfo?.title?.displayTitle ||
-    itemInfo?.title ||
-    itemInfo?.subject ||
-    keyword;
+  const title: string = info?.title || keyword;
 
-  const orders = parseInt(
-    String(itemInfo?.tradeDesc || itemInfo?.sales || itemInfo?.tradeCount || '0').replace(/[^0-9]/g, '')
-  );
+  // 상품 URL: item.itemUrl 또는 itemId로 구성
+  const itemUrl = info?.itemUrl
+    ? toHttps(info.itemUrl)
+    : `https://www.aliexpress.com/item/${id}.html`;
 
-  const rating = parseFloat(String(itemInfo?.averageStar || itemInfo?.evaluate || itemInfo?.rating || '4.5'));
+  const orders = parseInt(String(info?.sales || info?.tradeCount || '0').replace(/[^0-9]/g, ''));
+  const rating = parseFloat(String(info?.averageStarRate || info?.averageStar || '4.5')) || 4.5;
 
   const sellerName: string =
-    itemInfo?.store?.storeName ||
-    itemInfo?.sellerInfo?.storeName ||
-    itemInfo?.shopName || '판매자';
+    info?.store?.storeName ||
+    info?.sellerInfo?.storeName ||
+    info?.shopName || '판매자';
 
   return {
     id,
@@ -126,7 +119,7 @@ function parseAliItem(item: any, keyword: string): Product1688 | null {
     price_max: priceUsd * 1.2,
     price_max_krw: Math.round(priceUsd * 1.2 * USD_TO_KRW),
     image_url: imageUrl,
-    detail_url: `https://www.aliexpress.com/item/${id}.html`,
+    detail_url: itemUrl,
     seller_name: sellerName,
     monthly_orders: orders,
     rating,
@@ -156,7 +149,6 @@ function getMockProducts(keyword: string): Product1688[] {
     { title: `${keyword} New`,     price: 11.0, orders: 241,  rating: 4.7 },
     { title: `${keyword} Bulk`,    price: 5.0,  orders: 2304, rating: 4.5 },
   ];
-
   return mockItems.map((m, i) => {
     const priceKrw = Math.round(m.price * USD_TO_KRW);
     return {

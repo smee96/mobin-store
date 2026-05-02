@@ -1,6 +1,7 @@
 import { Env } from './types';
 import { handleScheduled } from './scheduler';
 import { search1688 } from './search1688';
+import { registerCoupangProduct, getCoupangProduct, convertToCoupangProduct } from './coupang';
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -25,14 +26,16 @@ export default {
 
     try {
 
-      // ── 상품 검색 (AliExpress Datahub via RapidAPI) ──
+      // ══════════════════════════════════════════
+      // 알리익스프레스 상품 검색 (RapidAPI)
+      // ══════════════════════════════════════════
+
       if (path === '/api/search/1688' && request.method === 'GET') {
         const keyword = url.searchParams.get('keyword');
         const page = parseInt(url.searchParams.get('page') || '1');
         if (!keyword) return json({ error: 'keyword 파라미터가 필요합니다' }, 400);
 
-        // KV 캐시 확인 (1시간)
-        const cacheKey = `search:${keyword}:${page}`;
+        const cacheKey = `search_v2:${keyword}:${page}`;
         const cached = await env.CACHE.get(cacheKey);
         if (cached) {
           return new Response(cached, {
@@ -40,11 +43,8 @@ export default {
           });
         }
 
-        // RapidAPI Key를 env에서 전달
         const products = await search1688(keyword, page, env.RAPIDAPI_KEY);
         const resultJson = JSON.stringify({ products, keyword, page, total: products.length });
-
-        // 실제 데이터면 캐시 저장, 목업이면 짧게 캐시
         const isMock = products[0]?.id?.startsWith('mock_');
         await env.CACHE.put(cacheKey, resultJson, { expirationTtl: isMock ? 60 : 3600 });
 
@@ -53,7 +53,62 @@ export default {
         });
       }
 
-      // ── 검색 상품 DB 등록 ──
+      // ══════════════════════════════════════════
+      // 쿠팡 상품 자동 등록
+      // ══════════════════════════════════════════
+
+      if (path === '/api/coupang/register' && request.method === 'POST') {
+        const body = await request.json() as any;
+        const { title, keyword, suggested_sell_price, image_url, detail_url, id: productDbId } = body;
+        if (!title || !keyword) return json({ error: 'title, keyword 필수' }, 400);
+
+        const coupangProduct = convertToCoupangProduct(env, {
+          title,
+          keyword,
+          suggested_sell_price: suggested_sell_price || 20000,
+          image_url: image_url || '',
+          detail_url: detail_url || '',
+        });
+
+        const result = await registerCoupangProduct(env, coupangProduct);
+
+        if (result.success && result.productId) {
+          const coupangUrl = `https://www.coupang.com/vp/products/${result.productId}`;
+
+          // DB에 상품 저장
+          const existing = productDbId
+            ? await env.DB.prepare(`SELECT id FROM products WHERE id = ?`).bind(productDbId).first()
+            : null;
+
+          if (existing) {
+            await env.DB.prepare(
+              `UPDATE products SET coupang_product_id = ?, coupang_url = ?, status = 'active', updated_at = datetime('now') WHERE id = ?`
+            ).bind(result.productId, coupangUrl, productDbId).run();
+          } else {
+            await env.DB.prepare(
+              `INSERT INTO products (name, keyword, coupang_product_id, coupang_url, price, margin_rate, source_url, source_image, status, score)
+               VALUES (?, ?, ?, ?, ?, 60, ?, ?, 'active', 50)`
+            ).bind(title, keyword, result.productId, coupangUrl, suggested_sell_price, detail_url, image_url).run();
+          }
+
+          return json({ success: true, productId: result.productId, coupangUrl, message: '쿠팡에 상품이 등록되었습니다!' }, 201);
+        } else {
+          return json({ success: false, error: result.error }, 400);
+        }
+      }
+
+      // GET /api/coupang/product/:id
+      if (path.match(/^\/api\/coupang\/product\/\d+$/) && request.method === 'GET') {
+        const productId = parseInt(path.split('/').pop()!);
+        const product = await getCoupangProduct(env, productId);
+        if (!product) return json({ error: '상품을 찾을 수 없습니다' }, 404);
+        return json(product);
+      }
+
+      // ══════════════════════════════════════════
+      // 검색 상품 DB 등록
+      // ══════════════════════════════════════════
+
       if (path === '/api/search/register' && request.method === 'POST') {
         const body = await request.json() as any;
         const { title, keyword, price_min_krw, suggested_sell_price, image_url, detail_url, estimated_margin } = body;
@@ -72,7 +127,10 @@ export default {
         return json({ id: result.meta.last_row_id, message: '상품이 등록되었습니다!' }, 201);
       }
 
-      // ── 대시보드 ──
+      // ══════════════════════════════════════════
+      // 대시보드
+      // ══════════════════════════════════════════
+
       if (path === '/api/dashboard' && request.method === 'GET') {
         const today = new Date().toISOString().split('T')[0];
         const thirtyDaysAgo = new Date();
@@ -90,7 +148,10 @@ export default {
         return json({ products: products.results, campaigns: campaigns.results, today: todayMetrics, month: monthMetrics, logs: recentLogs.results });
       }
 
-      // ── 상품 목록 ──
+      // ══════════════════════════════════════════
+      // 상품 관리
+      // ══════════════════════════════════════════
+
       if (path === '/api/products' && request.method === 'GET') {
         const status = url.searchParams.get('status');
         const limit = parseInt(url.searchParams.get('limit') || '20');
@@ -103,7 +164,6 @@ export default {
         return json(result.results);
       }
 
-      // ── 상품 등록 ──
       if (path === '/api/products' && request.method === 'POST') {
         const body = await request.json() as any;
         const result = await env.DB.prepare(
@@ -112,7 +172,6 @@ export default {
         return json({ id: result.meta.last_row_id, message: '상품이 등록되었습니다' }, 201);
       }
 
-      // ── 상품 상태 변경 ──
       if (path.match(/^\/api\/products\/\d+$/) && request.method === 'PUT') {
         const id = path.split('/').pop();
         const body = await request.json() as any;
@@ -120,7 +179,10 @@ export default {
         return json({ message: '업데이트 완료' });
       }
 
-      // ── 캠페인 ──
+      // ══════════════════════════════════════════
+      // 캠페인 / 차트 / 트렌드 / 로그
+      // ══════════════════════════════════════════
+
       if (path === '/api/campaigns' && request.method === 'GET') {
         const result = await env.DB.prepare(
           `SELECT c.*, p.name as product_name, p.keyword, ac.headline, ac.body_text,
@@ -135,7 +197,6 @@ export default {
         return json(result.results);
       }
 
-      // ── 차트 데이터 ──
       if (path === '/api/metrics/chart' && request.method === 'GET') {
         const days = parseInt(url.searchParams.get('days') || '30');
         const since = new Date();
@@ -147,13 +208,11 @@ export default {
         return json(result.results);
       }
 
-      // ── 트렌드 키워드 ──
       if (path === '/api/trends' && request.method === 'GET') {
         const result = await env.DB.prepare(`SELECT * FROM trend_keywords ORDER BY trend_score DESC LIMIT 50`).all();
         return json(result.results);
       }
 
-      // ── 수동 Job 실행 ──
       if (path.match(/^\/api\/run\/.+$/) && request.method === 'POST') {
         const jobName = path.split('/').pop();
         if (!jobName) return json({ error: 'job name required' }, 400);
@@ -166,7 +225,6 @@ export default {
         }
       }
 
-      // ── 로그 ──
       if (path === '/api/logs' && request.method === 'GET') {
         const result = await env.DB.prepare(`SELECT * FROM automation_logs ORDER BY started_at DESC LIMIT 30`).all();
         return json(result.results);
