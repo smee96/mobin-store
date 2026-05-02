@@ -1,9 +1,6 @@
 export interface Env {
-  // D1 Database
   DB: D1Database;
-  // KV Cache
   CACHE: KVNamespace;
-  // Secrets
   NAVER_CLIENT_ID: string;
   NAVER_CLIENT_SECRET: string;
   META_ACCESS_TOKEN: string;
@@ -11,11 +8,10 @@ export interface Env {
   META_PAGE_ID: string;
   CLAUDE_API_KEY: string;
   REMOVEBG_API_KEY: string;
-  // 쿠팡 API (신규)
+  RAPIDAPI_KEY: string;        // RapidAPI Key (AliExpress Datahub)
   COUPANG_ACCESS_KEY: string;
   COUPANG_SECRET_KEY: string;
   COUPANG_VENDOR_ID: string;
-  // Vars
   SMART_STORE_URL: string;
   MIN_ROAS: string;
   DAILY_BUDGET_PER_AD: string;
@@ -27,9 +23,8 @@ export interface Product {
   name: string;
   keyword: string;
   smart_store_url?: string;
-  coupang_product_id?: number;      // 쿠팡 상품 ID (신규)
-  coupang_vendor_item_id?: number;  // 쿠팡 벤더 아이템 ID (신규)
-  coupang_url?: string;             // 쿠팡 상품 URL (신규)
+  coupang_product_id?: number;
+  coupang_url?: string;
   price?: number;
   margin_rate?: number;
   monthly_search_volume?: number;

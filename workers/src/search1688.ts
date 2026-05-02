@@ -1,6 +1,6 @@
 // ─────────────────────────────────────────────────────────────
-// 1688 상품 검색 모듈
-// 나중에 AliExpress Affiliate API로 교체 가능한 구조로 설계
+// 알리익스프레스 상품 검색 모듈
+// RapidAPI - AliExpress Datahub API 사용
 // ─────────────────────────────────────────────────────────────
 
 export interface Product1688 {
@@ -21,123 +21,119 @@ export interface Product1688 {
   source: '1688' | 'aliexpress';
 }
 
-const CNY_TO_KRW = 190;
+const USD_TO_KRW = 1380;
 const MARKUP_RATE = 3.0;
 const SHIPPING_EST = 3000;
 
-// 1688 실제 검색 결과 URL 생성
-function get1688SearchUrl(keyword: string): string {
-  return `https://s.1688.com/selloffer/offer_search.htm?keywords=${encodeURIComponent(keyword)}`;
-}
-
-// ─── 메인 검색 함수 ───
 export async function search1688(
   keyword: string,
-  page = 1
+  page = 1,
+  rapidApiKey?: string
 ): Promise<Product1688[]> {
-  try {
-    const url = `https://s.1688.com/selloffer/offer_search.htm?keywords=${encodeURIComponent(keyword)}&beginPage=${page}`;
+  if (!rapidApiKey) {
+    console.warn('RAPIDAPI_KEY 없음 → 목업 데이터');
+    return getMockProducts(keyword);
+  }
 
-    const res = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15',
-        'Accept-Language': 'zh-CN,zh;q=0.9',
-        'Referer': 'https://www.1688.com/',
-      },
+  try {
+    const params = new URLSearchParams({
+      q: keyword,
+      page: String(page),
+      sort: 'BEST_MATCH',
+      locale: 'ko_KR',
+      currency: 'USD',
     });
 
+    const res = await fetch(
+      `https://aliexpress-datahub.p.rapidapi.com/item_search_4?${params}`,
+      {
+        headers: {
+          'x-rapidapi-host': 'aliexpress-datahub.p.rapidapi.com',
+          'x-rapidapi-key': rapidApiKey,
+        },
+      }
+    );
+
     if (!res.ok) {
-      console.warn('1688 fetch failed:', res.status, '→ using mock data');
+      console.error('RapidAPI 오류:', res.status);
       return getMockProducts(keyword);
     }
 
-    const html = await res.text();
-    const products = parse1688Response(html, keyword);
-    return products.length > 0 ? products : getMockProducts(keyword);
+    const data = await res.json() as any;
+    const items =
+      data?.result?.resultList ||
+      data?.items ||
+      data?.data?.items || [];
+
+    if (!items.length) return getMockProducts(keyword);
+
+    return items
+      .slice(0, 20)
+      .map((item: any) => parseAliItem(item, keyword))
+      .filter(Boolean) as Product1688[];
 
   } catch (e) {
-    console.error('search1688 error:', e);
+    console.error('search aliexpress error:', e);
     return getMockProducts(keyword);
   }
 }
 
-// ─── HTML / JSON 파싱 ───
-function parse1688Response(html: string, keyword: string): Product1688[] {
-  const products: Product1688[] = [];
+function parseAliItem(item: any, keyword: string): Product1688 | null {
+  const itemInfo = item?.item || item;
 
-  const patterns = [
-    /window\.__INIT_DATA__\s*=\s*({[\s\S]+?});\s*<\/script>/,
-    /window\.DATA\s*=\s*({[\s\S]+?});\s*<\/script>/,
-    /"offerList"\s*:\s*(\[[\s\S]+?\])\s*,\s*"[a-z]/,
-  ];
-
-  for (const pattern of patterns) {
-    const m = html.match(pattern);
-    if (!m) continue;
-    try {
-      const raw = m[1].startsWith('[') ? `{"list":${m[1]}}` : m[1];
-      const data = JSON.parse(raw);
-      const list: any[] =
-        data?.data?.result?.offerList ||
-        data?.result?.offerList ||
-        data?.list || [];
-
-      for (const item of list.slice(0, 24)) {
-        const p = itemToProduct(item, keyword);
-        if (p) products.push(p);
-      }
-      if (products.length > 0) break;
-    } catch { /* 다음 패턴 시도 */ }
-  }
-
-  return products;
-}
-
-function itemToProduct(item: any, keyword: string): Product1688 | null {
   const priceRaw =
-    item?.tradePrice ||
-    item?.priceInfo?.price ||
-    item?.price ||
-    item?.minPrice || '0';
+    itemInfo?.sku?.def?.promotionPrice ||
+    itemInfo?.sku?.def?.price ||
+    itemInfo?.prices?.salePrice?.minPrice ||
+    itemInfo?.salePrice ||
+    itemInfo?.price || '0';
 
-  const priceMin = parseFloat(String(priceRaw).replace(/[^\d.]/g, ''));
-  if (!priceMin || priceMin <= 0) return null;
+  const priceUsd = parseFloat(String(priceRaw).replace(/[^\d.]/g, ''));
+  if (!priceUsd || priceUsd <= 0) return null;
 
-  const priceMax = parseFloat(item?.maxPrice || String(priceMin * 1.3));
-  const priceMinKrw = Math.round(priceMin * CNY_TO_KRW);
-  const priceMaxKrw = Math.round(priceMax * CNY_TO_KRW);
-  const id = String(item?.offerId || item?.id || Math.random().toString(36).slice(2));
+  const priceKrw = Math.round(priceUsd * USD_TO_KRW);
+  const id = String(itemInfo?.itemId || itemInfo?.productId || itemInfo?.id || Math.random().toString(36).slice(2));
 
-  let imageUrl: string = item?.imgUrl || item?.image || '';
+  let imageUrl: string =
+    itemInfo?.image?.imgUrl ||
+    itemInfo?.images?.[0] ||
+    itemInfo?.mainImage ||
+    itemInfo?.imageUrl || '';
   if (imageUrl.startsWith('//')) imageUrl = `https:${imageUrl}`;
-  if (!imageUrl) imageUrl = `https://placehold.co/300x300?text=${encodeURIComponent(keyword)}`;
 
-  const title: string = item?.subject || item?.title || keyword;
-  const sellerName: string = item?.sellerInfo?.sellerLoginId || item?.companyName || '판매자';
-  const monthlyOrders = parseInt(item?.tradeCount || item?.soldCount || '0');
-  const rating = parseFloat(item?.sellerInfo?.serviceScore || '4.5');
+  const title: string =
+    itemInfo?.title?.displayTitle ||
+    itemInfo?.title ||
+    itemInfo?.subject ||
+    keyword;
 
-  // 실제 상품 ID가 있으면 상품 상세 URL, 없으면 검색 결과 URL
-  const detailUrl = id && !id.startsWith('mock')
-    ? `https://detail.1688.com/offer/${id}.html`
-    : get1688SearchUrl(keyword);
+  const orders = parseInt(
+    String(itemInfo?.tradeDesc || itemInfo?.sales || itemInfo?.tradeCount || '0').replace(/[^0-9]/g, '')
+  );
+
+  const rating = parseFloat(String(itemInfo?.averageStar || itemInfo?.evaluate || itemInfo?.rating || '4.5'));
+
+  const sellerName: string =
+    itemInfo?.store?.storeName ||
+    itemInfo?.sellerInfo?.storeName ||
+    itemInfo?.shopName || '판매자';
 
   return {
     id,
     title,
-    price_min: priceMin,
-    price_min_krw: priceMinKrw,
-    price_max: priceMax,
-    price_max_krw: priceMaxKrw,
+    price_min: priceUsd,
+    price_min_krw: priceKrw,
+    price_max: priceUsd * 1.2,
+    price_max_krw: Math.round(priceUsd * 1.2 * USD_TO_KRW),
     image_url: imageUrl,
-    detail_url: detailUrl,
+    detail_url: `https://www.aliexpress.com/item/${id}.html`,
     seller_name: sellerName,
-    monthly_orders: monthlyOrders,
+    monthly_orders: orders,
     rating,
     keyword,
-    estimated_margin: calcMargin(priceMinKrw),
-    suggested_sell_price: calcSellPrice(priceMinKrw),
-    source: '1688',
+    estimated_margin: calcMargin(priceKrw),
+    suggested_sell_price: calcSellPrice(priceKrw),
+    source: 'aliexpress',
   };
 }
 
@@ -150,39 +146,35 @@ function calcMargin(costKrw: number): number {
   return Math.round(((sell - costKrw - SHIPPING_EST) / sell) * 100);
 }
 
-// ─── 목업 데이터 ───
-// 스크래핑 실패 시 사용. 상세보기는 1688 실제 검색 결과 페이지로 연결
 function getMockProducts(keyword: string): Product1688[] {
+  const searchUrl = `https://www.aliexpress.com/wholesale?SearchText=${encodeURIComponent(keyword)}`;
   const mockItems = [
-    { title: `${keyword} 프리미엄 세트`, price: 12.5, orders: 1243, rating: 4.8 },
-    { title: `${keyword} 베이직 A형`,    price: 6.8,  orders: 3821, rating: 4.6 },
-    { title: `${keyword} 고급형 패키지`, price: 25.0, orders: 587,  rating: 4.9 },
-    { title: `${keyword} 가성비 모델`,   price: 3.5,  orders: 9102, rating: 4.3 },
-    { title: `${keyword} 신상 2024`,     price: 18.0, orders: 241,  rating: 4.7 },
-    { title: `${keyword} OEM 대량구매`,  price: 8.0,  orders: 2304, rating: 4.5 },
+    { title: `${keyword} Premium`, price: 8.5,  orders: 1243, rating: 4.8 },
+    { title: `${keyword} Basic`,   price: 3.9,  orders: 3821, rating: 4.6 },
+    { title: `${keyword} Pro`,     price: 15.0, orders: 587,  rating: 4.9 },
+    { title: `${keyword} Budget`,  price: 2.1,  orders: 9102, rating: 4.3 },
+    { title: `${keyword} New`,     price: 11.0, orders: 241,  rating: 4.7 },
+    { title: `${keyword} Bulk`,    price: 5.0,  orders: 2304, rating: 4.5 },
   ];
 
-  // 상세보기 → 1688 실제 검색 결과 페이지로 연결
-  const searchUrl = get1688SearchUrl(keyword);
-
   return mockItems.map((m, i) => {
-    const priceMinKrw = Math.round(m.price * CNY_TO_KRW);
+    const priceKrw = Math.round(m.price * USD_TO_KRW);
     return {
       id: `mock_${keyword}_${i}`,
       title: m.title,
       price_min: m.price,
-      price_min_krw: priceMinKrw,
-      price_max: m.price * 1.3,
-      price_max_krw: Math.round(m.price * 1.3 * CNY_TO_KRW),
-      image_url: `https://placehold.co/300x300/1a1a26/7c5cfc?text=${encodeURIComponent(keyword)}`,
-      detail_url: searchUrl,  // ← 1688 실제 검색 결과 페이지
-      seller_name: `판매자_${i + 1}`,
+      price_min_krw: priceKrw,
+      price_max: m.price * 1.2,
+      price_max_krw: Math.round(m.price * 1.2 * USD_TO_KRW),
+      image_url: `https://placehold.co/300x300/f5f0e8/6c47e8?text=${encodeURIComponent(keyword)}`,
+      detail_url: searchUrl,
+      seller_name: `Store_${i + 1}`,
       monthly_orders: m.orders,
       rating: m.rating,
       keyword,
-      estimated_margin: calcMargin(priceMinKrw),
-      suggested_sell_price: calcSellPrice(priceMinKrw),
-      source: '1688' as const,
+      estimated_margin: calcMargin(priceKrw),
+      suggested_sell_price: calcSellPrice(priceKrw),
+      source: 'aliexpress' as const,
     };
   });
 }
