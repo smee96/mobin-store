@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Mobin Store — 자동화 대시보드</title>
+<title>Mobin Store — 판매 자동화 대시보드</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
@@ -296,6 +296,54 @@
   </main>
 </div>
 
+<!-- Coupang Register Modal -->
+<div class="modal-overlay" id="modal-coupang">
+  <div class="modal" style="width:520px">
+    <div class="modal-title">🛒 쿠팡 상품 등록</div>
+    <div style="display:flex;gap:16px;margin-bottom:16px">
+      <img id="coupang-modal-img" src="" style="width:80px;height:80px;object-fit:cover;border-radius:8px;background:var(--bg3)" onerror="this.style.display='none'">
+      <div style="flex:1">
+        <div class="form-group" style="margin-bottom:8px">
+          <label class="form-label">상품명</label>
+          <input class="form-input" id="coupang-title" style="font-size:12px">
+        </div>
+        <div id="coupang-source-price" style="font-size:12px;color:var(--muted)"></div>
+      </div>
+    </div>
+    <div class="grid-2" style="margin-bottom:0">
+      <div class="form-group">
+        <label class="form-label">판매가 (원) *</label>
+        <input class="form-input" id="coupang-sale-price" type="number" oninput="updateCoupangMargin()">
+      </div>
+      <div class="form-group">
+        <label class="form-label">정가 (원) - 자동계산</label>
+        <input class="form-input" id="coupang-original-price" type="number">
+      </div>
+      <div class="form-group">
+        <label class="form-label">배송비 (원)</label>
+        <input class="form-input" id="coupang-shipping-fee" type="number" value="0" oninput="updateCoupangMargin()">
+        <div style="font-size:11px;color:var(--muted);margin-top:4px">0 = 무료배송</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">재고 수량</label>
+        <input class="form-input" id="coupang-stock" type="number" value="999">
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">예상 마진율 (%)</label>
+      <input class="form-input" id="coupang-margin" type="number" readonly style="background:var(--bg3);cursor:not-allowed">
+      <div id="coupang-margin-display" style="font-size:13px;font-weight:600;margin-top:6px"></div>
+    </div>
+    <div style="background:var(--bg3);border-radius:8px;padding:10px;font-size:12px;color:var(--muted);margin-bottom:16px">
+      ⚠️ 배송 기간: 알리익스프레스 해외직구로 7~20일 소요됩니다. 상품 페이지에 배송 기간을 명시하세요.
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-coupang" id="btn-coupang-submit" onclick="submitCoupangRegister()" style="flex:1">🛒 쿠팡 등록하기</button>
+      <button class="btn btn-outline" onclick="closeModal('modal-coupang')" style="flex:1">취소</button>
+    </div>
+  </div>
+</div>
+
 <!-- Add Product Modal -->
 <div class="modal-overlay" id="modal-product">
   <div class="modal">
@@ -558,33 +606,67 @@ async function doSearch(page=1) {
     </div>`).join('');
 }
 
-async function registerToCoupang(p) {
-  if (!confirm(`"${p.title}"\n\n권장 판매가: ${p.suggested_sell_price.toLocaleString()}원\n예상 마진: ${p.estimated_margin}%\n\n쿠팡에 자동 등록할까요?`)) return;
+// ─── 쿠팡 등록 모달 ───
+let currentCoupangProduct = null;
 
-  const btn = event.target;
+function registerToCoupang(p) {
+  currentCoupangProduct = p;
+  // 모달에 기본값 채우기
+  document.getElementById('coupang-title').value = p.title;
+  document.getElementById('coupang-sale-price').value = p.suggested_sell_price;
+  document.getElementById('coupang-original-price').value = Math.round(p.suggested_sell_price * 1.2);
+  document.getElementById('coupang-margin').value = p.estimated_margin;
+  document.getElementById('coupang-shipping-fee').value = '0';
+  document.getElementById('coupang-stock').value = '999';
+  document.getElementById('coupang-modal-img').src = p.image_url || '';
+  document.getElementById('coupang-source-price').textContent = `알리 원가: $${p.price_min} (${p.price_min_krw.toLocaleString()}원)`;
+  document.getElementById('modal-coupang').classList.add('open');
+  updateCoupangMargin();
+}
+
+function updateCoupangMargin() {
+  const salePrice = parseInt(document.getElementById('coupang-sale-price').value) || 0;
+  const costKrw = currentCoupangProduct?.price_min_krw || 0;
+  const shippingFee = parseInt(document.getElementById('coupang-shipping-fee').value) || 0;
+  const margin = salePrice > 0 ? Math.round(((salePrice - costKrw - shippingFee) / salePrice) * 100) : 0;
+  document.getElementById('coupang-margin').value = margin;
+  document.getElementById('coupang-original-price').value = Math.round(salePrice * 1.2);
+  const marginEl = document.getElementById('coupang-margin-display');
+  if (marginEl) {
+    marginEl.textContent = `예상 마진: ${margin}%`;
+    marginEl.style.color = margin >= 50 ? 'var(--success)' : margin >= 30 ? 'var(--warning)' : 'var(--danger)';
+  }
+}
+
+async function submitCoupangRegister() {
+  if (!currentCoupangProduct) return;
+  const btn = document.getElementById('btn-coupang-submit');
   btn.disabled = true;
   btn.textContent = '등록 중...';
+
+  const payload = {
+    ...currentCoupangProduct,
+    title: document.getElementById('coupang-title').value,
+    suggested_sell_price: parseInt(document.getElementById('coupang-sale-price').value),
+    original_price: parseInt(document.getElementById('coupang-original-price').value),
+    shipping_fee: parseInt(document.getElementById('coupang-shipping-fee').value) || 0,
+    stock_quantity: parseInt(document.getElementById('coupang-stock').value) || 999,
+  };
 
   const result = await api('/api/coupang/register', {
     method: 'POST',
     headers: {'Content-Type':'application/json'},
-    body: JSON.stringify(p),
+    body: JSON.stringify(payload),
   });
 
   btn.disabled = false;
   btn.textContent = '🛒 쿠팡 등록';
 
   if (result?.success) {
-    alert(`✅ 쿠팡 등록 완료!\n\n상품 관리 탭에서 확인하세요.\n쿠팡 URL: ${result.coupangUrl}`);
-    // 버튼을 성공 상태로 변경
-    btn.textContent = '✅ 등록됨';
-    btn.className = 'btn btn-sm';
-    btn.style.flex = '1';
-    btn.style.background = 'rgba(0,229,160,0.15)';
-    btn.style.color = 'var(--success)';
-    btn.disabled = true;
+    closeModal('modal-coupang');
+    alert(`✅ 쿠팡 등록 완료!\n\n쿠팡 URL: ${result.coupangUrl}`);
   } else {
-    alert('등록 실패: ' + (result?.error || '알 수 없는 오류\n\nIP 허용 설정을 확인해주세요.'));
+    alert('등록 실패: ' + (result?.error || '알 수 없는 오류'));
   }
 }
 
