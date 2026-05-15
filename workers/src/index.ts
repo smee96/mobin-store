@@ -3,6 +3,7 @@ import { handleScheduled } from './scheduler';
 import { search1688 } from './search1688';
 import { registerCoupangProduct, getCoupangProduct, convertToCoupangProduct } from './coupang';
 import { crawlCostcoDeals } from './costco';
+import { comparePrices } from './priceCompare';
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -217,6 +218,32 @@ export default {
       // ══════════════════════════════════════════
       // 코스트코 특가 상품 크롤링
       // ══════════════════════════════════════════
+
+      // ══════════════════════════════════════════
+      // 쿠팡 / 네이버 가격 비교 (상품명으로 스크레이핑)
+      // ══════════════════════════════════════════
+
+      if (path === '/api/price-compare' && request.method === 'GET') {
+        const name = url.searchParams.get('name');
+        if (!name) return json({ error: 'name 파라미터가 필요합니다' }, 400);
+
+        const cacheKey = `price:${name.slice(0, 60)}`;
+        const cached = await env.CACHE.get(cacheKey);
+        if (cached) {
+          return new Response(cached, {
+            headers: { 'Content-Type': 'application/json', ...corsHeaders, 'X-Cache': 'HIT' },
+          });
+        }
+
+        const result = await comparePrices(name, env);
+        const resultJson = JSON.stringify(result);
+        // 30분 캐시 (가격은 자주 바뀌지 않음)
+        await env.CACHE.put(cacheKey, resultJson, { expirationTtl: 1800 });
+
+        return new Response(resultJson, {
+          headers: { 'Content-Type': 'application/json', ...corsHeaders },
+        });
+      }
 
       if (path === '/api/costco' && request.method === 'GET') {
         const page = parseInt(url.searchParams.get('page') || '0');
