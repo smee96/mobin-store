@@ -111,6 +111,12 @@
   .costco-period{font-size:10px;color:var(--muted);margin-top:2px;}
   .price-costco{font-family:var(--mono);font-size:13px;font-weight:700;color:var(--accent4);white-space:nowrap;}
   .price-na{color:var(--muted);font-size:12px;}
+  /* 코스트코 가격 표시 컴포넌트 */
+  .costco-price-wrap{display:flex;flex-direction:column;align-items:flex-end;gap:1px;white-space:nowrap;}
+  .costco-price-final{font-family:var(--mono);font-size:14px;font-weight:700;color:var(--accent2);}
+  .costco-price-orig{font-family:var(--mono);font-size:11px;color:var(--muted);text-decoration:line-through;}
+  .costco-price-disc{font-family:var(--mono);font-size:11px;color:var(--danger);font-weight:600;}
+  .costco-price-single{font-family:var(--mono);font-size:13px;font-weight:700;color:var(--accent4);}
   .search-link-btn{display:inline-flex;align-items:center;gap:3px;padding:4px 9px;border-radius:6px;font-size:11px;font-weight:500;text-decoration:none;white-space:nowrap;transition:opacity .15s;}
   .search-link-btn:hover{opacity:.8;}
   .btn-coupang-link{background:rgba(232,57,58,.1);color:var(--coupang);border:1px solid rgba(232,57,58,.25);}
@@ -200,7 +206,7 @@
       <!-- 안내 배너 -->
       <div style="background:rgba(108,71,232,.06);border:1px solid rgba(108,71,232,.18);border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size:12px;color:var(--muted);display:flex;align-items:center;gap:10px">
         <span style="font-size:16px">💡</span>
-        <span>쿠팡 / 네이버 버튼 클릭 → 새 탭에서 검색 결과가 열립니다. 코스트코 특가가 한정 수량 상품이라 실제 사이트에서 쿠팡 / 네이버 가격을 확인하세요.</span>
+        <span>쿠팡 / 네이버 버튼 클릭 → 새 탭에서 검색 결과가 열립니다. <strong>코스트코 가격</strong>은 로그인 전 기준 판매금액이며, 회원 할인·쿠폰 적용 시 총 결제금액이 다를 수 있습니다.</span>
       </div>
 
       <div class="card" style="padding:0;overflow:hidden">
@@ -209,7 +215,7 @@
             <thead>
               <tr>
                 <th style="min-width:230px;padding-left:16px">상품명</th>
-                <th style="text-align:right">코스트코 특가</th>
+                <th style="text-align:right">판매금액</th>
                 <th style="text-align:center">단위가 / 할인</th>
                 <th style="text-align:center;color:var(--coupang)">쿠팡 검색</th>
                 <th style="text-align:center;color:#028a4a">네이버쇼핑</th>
@@ -698,6 +704,27 @@ function extractSearchKeyword(name) {
     .split(/\s+/).slice(0, 4).join(' ');
 }
 
+// 코스트코 가격 셀 렌더링
+// - 총결제금액(price) + 판매금액(originalPrice) 취소선 + 할인금액(-discountAmount) / 할인율
+// - 할인 데이터 없으면 판매금액만 단일 표시
+function renderCostcoPrice(p) {
+  const hasDiscount = p.originalPrice && p.price && p.originalPrice !== p.price;
+  if (hasDiscount) {
+    // 총결제금액 크게, 판매금액 취소선, 할인금액 빨간색
+    const discLabel = p.discountAmount
+      ? `-${escHtml(p.discountAmount)}`
+      : (p.discount ? `${escHtml(p.discount)} 할인` : '');
+    return `
+      <div class="costco-price-wrap">
+        <div class="costco-price-final">${escHtml(p.price)}</div>
+        <div class="costco-price-orig">${escHtml(p.originalPrice)}</div>
+        ${discLabel ? `<div class="costco-price-disc">${discLabel}</div>` : ''}
+      </div>`;
+  }
+  // 할인 없음 → 판매금액 단순 표시
+  return `<div class="costco-price-single">${p.price ? escHtml(p.price) : '—'}</div>`;
+}
+
 function renderCostcoTable() {
   const tbody = document.getElementById('costco-tbody');
   if (!costcoAllProducts.length) {
@@ -723,8 +750,8 @@ function renderCostcoTable() {
         </div>
       </td>
       <td style="text-align:right">
-        <div style="font-family:var(--mono);font-size:13px;font-weight:700;color:var(--accent4);white-space:nowrap">${p.price || '—'}</div>
-        ${p.isSoldOut ? '<div style="font-size:10px;color:var(--danger)">품절</div>' : ''}
+        ${renderCostcoPrice(p)}
+        ${p.isSoldOut ? '<div style="font-size:10px;color:var(--danger);margin-top:2px">품절</div>' : ''}
       </td>
       <td style="text-align:center">
         <div style="font-size:11px;color:var(--muted)">${p.unit ? escHtml(p.unit) : '—'}</div>

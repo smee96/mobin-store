@@ -105,27 +105,82 @@ function parseProductBlock(
     ?? block.match(/src="(https:\/\/[^"]+\.(?:jpg|jpeg|png|webp)[^"]*)"/i);
   const imageUrl = imgMatch?.[1] ?? '';
 
-  // ── 가격: notranslate span 내부 ──
-  const priceMatches = [...block.matchAll(/notranslate[^>]+>\s*([\d,]+원)\s*</g)];
-  const price = priceMatches.length > 0 ? priceMatches[0][1].trim() : '';
-  const priceNum = parseInt(price.replace(/[^0-9]/g, '') || '0');
+  // ── 가격 파싱 ──
+  // 코스트코 HTML 구조 (목록 페이지 SSR 기준):
+  //   class="original-price"  → 판매금액 (notranslate span)
+  //   class="price-original"  → 판매금액 (상세 페이지용, price-tag + notranslate)
+  //   class="discount"        → 할인 블록 (discount-tag, discount-value - JS 동적 렌더)
+  //   class="price-after-discount" → 총 결제금액 (you-pay-value - JS 동적 렌더)
+  //
+  // 주의: 할인금액/총결제금액은 로그인 후 클라이언트JS가 동적으로 렌더링.
+  // SSR HTML에서는 original-price(판매금액)만 추출 가능.
 
-  // ── 할인금액: 가격 두 번째 등장 시 원가로 추정 (코스트코는 할인 후 가격이 먼저) ──
-  // 코스트코 특가 구조: [현재가] [단위가] → 할인금액은 별도 텍스트 없이 원가에서 역산
-  // price-per-unit 이후 나오는 별도 가격이 원가인 경우도 있음
-  const allPrices = [...block.matchAll(/notranslate[^>]+>\s*([\d,]+원)\s*</g)].map(m => m[1].trim());
+  // 1) original-price 클래스에서 판매금액 추출
+  const origPriceMatch = block.match(
+    /class="original-price[^"]*"[^>]*>.*?class="(?:product-price-amount|price-value)[^"]*"[^>]*>.*?class="notranslate[^"]*">\s*([\d,]+원)\s*</s
+  ) ?? block.match(
+    /class="original-price[^"]*"[^>]*>[\s\S]*?notranslate[^>]*>\s*([\d,]+원)\s*</
+  );
   
-  // 할인금액 텍스트 직접 탐색
-  const discAmtMatch = block.match(/(?:할인금액|discount-amount)[^>]*>\s*([\d,]+원)/i)
-    ?? block.match(/was-price[^>]*>\s*([\d,]+원)/i);
-  const discountAmount = discAmtMatch?.[1] ?? '';
+  // 2) 폴백: price-original 클래스 (상세 페이지 호환)
+  const priceOriginalMatch = !origPriceMatch ? block.match(
+    /class="price-original[^"]*"[^>]*>[\s\S]*?notranslate[^>]*>\s*([\d,]+원)\s*</
+  ) : null;
+
+  // 3) 최종 폴백: notranslate 첫 번째 값
+  const sellingPriceStr: string = origPriceMatch
+    ? origPriceMatch[1].trim()
+    : priceOriginalMatch
+      ? priceOriginalMatch[1].trim()
+      : (block.match(/notranslate[^>]+>\s*([\d,]+원)\s*</)?.[1]?.trim() ?? '');
+
+  const sellingPriceNum = parseInt(sellingPriceStr.replace(/[^0-9]/g, '') || '0');
+
+  // ── 할인 정보 (SSR에서는 대부분 비어있음, 향후 확장용) ──
+  // price-tag "할인금액" 패턴
+  const discTagMatch = block.match(/class="price-tag[^"]*">할인금액<\/span>[\s\S]*?notranslate[^>]*>\s*([\d,]+원)\s*</);
+  // discount-value 패턴
+  const discValueMatch = !discTagMatch
+    ? block.match(/class="discount-value[^"]*"[^>]*>[\s\S]*?notranslate[^>]*>\s*([\d,]+원)\s*</)
+    : null;
+  // 음수(-) 가격 패턴 (할인금액 표시)
+  const negPriceMatch = !discTagMatch && !discValueMatch
+    ? block.match(/notranslate[^>]*>\s*-\s*([\d,]+원)\s*</)
+    : null;
+
+  const discountAmount = (discTagMatch?.[1] ?? discValueMatch?.[1] ?? negPriceMatch?.[1] ?? '').trim();
   const discountNum = parseInt(discountAmount.replace(/[^0-9]/g, '') || '0');
 
-  let originalPrice = '';
-  let discount = '';
-  if (priceNum > 0 && discountNum > 0) {
-    originalPrice = (priceNum + discountNum).toLocaleString('ko-KR') + '원';
-    discount = Math.round((discountNum / (priceNum + discountNum)) * 100) + '%';
+  // ── 총 결제금액 (you-pay-value 클래스, SSR 미지원으로 대부분 비어있음) ──
+  const youPayMatch = block.match(/class="you-pay-value[^"]*"[^>]*>[\s\S]*?notranslate[^>]*>\s*([\d,]+원)\s*</);
+  const finalPriceStr = youPayMatch?.[1]?.trim() ?? '';
+  const finalPriceNum = parseInt(finalPriceStr.replace(/[^0-9]/g, '') || '0');
+
+  // price / originalPrice / discount / discountAmount 최종 결정
+  // 총결제금액(finalPriceNum)이 있으면 → price=총결제금액, originalPrice=판매금액
+  // 할인금액(discountNum)만 있으면   → price=판매금액,    originalPrice=판매금액+할인금액
+  // 아무것도 없으면                  → price=판매금액,    나머지 빈 문자열
+  let price: string;
+  let priceNum: number;
+  let originalPrice: string;
+  let discount: string;
+
+  if (finalPriceNum > 0 && sellingPriceNum > 0 && finalPriceNum < sellingPriceNum) {
+    price = finalPriceStr;
+    priceNum = finalPriceNum;
+    originalPrice = sellingPriceStr;
+    const savedNum = sellingPriceNum - finalPriceNum;
+    discount = Math.round((savedNum / sellingPriceNum) * 100) + '%';
+  } else if (sellingPriceNum > 0 && discountNum > 0) {
+    price = sellingPriceStr;
+    priceNum = sellingPriceNum;
+    originalPrice = (sellingPriceNum + discountNum).toLocaleString('ko-KR') + '원';
+    discount = Math.round((discountNum / (sellingPriceNum + discountNum)) * 100) + '%';
+  } else {
+    price = sellingPriceStr;
+    priceNum = sellingPriceNum;
+    originalPrice = '';
+    discount = '';
   }
 
   // ── 행사기간: YYYY/MM/DD 두 개 ──
