@@ -2,6 +2,7 @@ import { Env } from './types';
 import { handleScheduled } from './scheduler';
 import { search1688 } from './search1688';
 import { registerCoupangProduct, getCoupangProduct, convertToCoupangProduct } from './coupang';
+import { crawlCostcoDeals } from './costco';
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -211,6 +212,36 @@ export default {
       if (path === '/api/trends' && request.method === 'GET') {
         const result = await env.DB.prepare(`SELECT * FROM trend_keywords ORDER BY trend_score DESC LIMIT 50`).all();
         return json(result.results);
+      }
+
+      // ══════════════════════════════════════════
+      // 코스트코 특가 상품 크롤링
+      // ══════════════════════════════════════════
+
+      if (path === '/api/costco' && request.method === 'GET') {
+        const page = parseInt(url.searchParams.get('page') || '0');
+        const size = parseInt(url.searchParams.get('size') || '20');
+        const nocache = url.searchParams.get('nocache') === '1';
+
+        const cacheKey = `costco:page:${page}:${size}`;
+
+        if (!nocache) {
+          const cached = await env.CACHE.get(cacheKey);
+          if (cached) {
+            return new Response(cached, {
+              headers: { 'Content-Type': 'application/json', ...corsHeaders, 'X-Cache': 'HIT' },
+            });
+          }
+        }
+
+        const data = await crawlCostcoDeals(page, size);
+        const resultJson = JSON.stringify(data);
+        // 10분 캐시 (nocache=1이어도 결과 자체는 캐싱해서 다음 요청엔 활용)
+        await env.CACHE.put(cacheKey, resultJson, { expirationTtl: 600 });
+
+        return new Response(resultJson, {
+          headers: { 'Content-Type': 'application/json', ...corsHeaders },
+        });
       }
 
       if (path.match(/^\/api\/run\/.+$/) && request.method === 'POST') {
