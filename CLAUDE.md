@@ -20,9 +20,9 @@ git merge genspark_ai_developer --no-ff -m "feat: 변경 내용 요약"
 git push origin main
 
 # 2) Production으로 배포 (--branch main 필수!)
-CLOUDFLARE_API_KEY="$CLOUDFLARE_API_KEY" \
-CLOUDFLARE_EMAIL="kyuhan.lee@mobin-inc.com" \
-npx wrangler pages deploy pages/src \
+source /home/user/webapp/.env
+CLOUDFLARE_API_TOKEN="$CLOUDFLARE_API_TOKEN" \
+wrangler pages deploy pages/src \
   --project-name mobin-store \
   --branch main \
   --commit-dirty=true
@@ -35,24 +35,38 @@ npx wrangler pages deploy pages/src \
 ## 인증 정보
 
 - **CLOUDFLARE_EMAIL**: `kyuhan.lee@mobin-inc.com`
-- **CLOUDFLARE_API_KEY**: Cloudflare Global API Key (이전 대화 컨텍스트 또는 사용자에게 확인)
+- **CLOUDFLARE_API_TOKEN**: `/home/user/webapp/.env` 파일에 저장됨 (gitignore 처리)
+
+### ✅ 인증 로드 방법 (항상 이렇게)
+
+```bash
+# .env 파일에서 토큰 로드 후 배포
+source /home/user/webapp/.env
+```
+
+`.env` 파일 위치: `/home/user/webapp/.env`
+```
+CLOUDFLARE_API_TOKEN=cfut_xxx...
+CLOUDFLARE_EMAIL=kyuhan.lee@mobin-inc.com
+```
 
 ### Worker 배포
 
 ```bash
-cd workers
-CLOUDFLARE_API_KEY="..." \
-CLOUDFLARE_EMAIL="kyuhan.lee@mobin-inc.com" \
-npm run deploy
+source /home/user/webapp/.env
+cd /home/user/webapp/workers && \
+CLOUDFLARE_API_TOKEN="$CLOUDFLARE_API_TOKEN" \
+wrangler deploy
 ```
 
 ### Pages 배포 (Production)
 
 ```bash
 # 반드시 --branch main 포함!
-CLOUDFLARE_API_KEY="..." \
-CLOUDFLARE_EMAIL="kyuhan.lee@mobin-inc.com" \
-npx wrangler pages deploy pages/src \
+source /home/user/webapp/.env
+cd /home/user/webapp && \
+CLOUDFLARE_API_TOKEN="$CLOUDFLARE_API_TOKEN" \
+wrangler pages deploy pages/src \
   --project-name mobin-store \
   --branch main \
   --commit-dirty=true
