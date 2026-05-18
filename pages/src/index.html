@@ -161,7 +161,7 @@
       <div class="topbar">
         <div><div class="page-title">대시보드</div><div class="page-sub" id="last-updated">로딩 중...</div></div>
         <div class="topbar-right">
-          <div class="worker-url" onclick="copyWorkerUrl()">🔗 <span id="worker-url-text">Worker URL 설정 필요</span></div>
+          <div class="worker-url" onclick="copyWorkerUrl()">🔗 <span id="worker-url-text">mobin-store-worker</span></div>
           <button class="btn btn-outline btn-sm" onclick="refreshAll()">↻ 새로고침</button>
         </div>
       </div>
@@ -345,7 +345,7 @@
           <div class="card-title">🔗 Worker 연결</div>
           <div class="form-group">
             <label class="form-label">Cloudflare Worker URL</label>
-            <input class="form-input" id="setting-worker-url" placeholder="https://mobin-store-worker.YOUR_SUBDOMAIN.workers.dev">
+            <input class="form-input" id="setting-worker-url" value="https://mobin-store-worker.kyuhan-lee.workers.dev" readonly style="opacity:0.7;cursor:default">
           </div>
           <button class="btn btn-primary" onclick="saveSettings()">저장 & 연결 테스트</button>
           <div id="connection-status" style="margin-top:12px;font-size:12px;display:none"></div>
@@ -382,18 +382,14 @@
 </div>
 
 <script>
-let WORKER_URL = localStorage.getItem('mobin_worker_url') || '';
+const WORKER_URL = 'https://mobin-store-worker.kyuhan-lee.workers.dev';
 let chartRevenue = null, chartRoas = null;
 let currentPage = 1, currentKeyword = '';
 
 document.addEventListener('DOMContentLoaded', () => {
-  if (WORKER_URL) {
-    document.getElementById('setting-worker-url').value = WORKER_URL;
-    document.getElementById('worker-url-text').textContent = WORKER_URL.replace('https://','').split('.')[0] + '...workers.dev';
-    document.getElementById('config-notice').style.display = 'none';
-  } else {
-    document.getElementById('config-notice').style.display = 'flex';
-  }
+  document.getElementById('setting-worker-url').value = WORKER_URL;
+  document.getElementById('worker-url-text').textContent = 'mobin-store-worker';
+  document.getElementById('config-notice').style.display = 'none';
   loadDashboard();
 });
 
@@ -412,7 +408,7 @@ function showPage(name, el) {
 }
 
 async function api(path, options = {}) {
-  if (!WORKER_URL) return null;
+  if (!WORKER_URL) return null; // 항상 설정됨
   try {
     const res = await fetch(WORKER_URL + path, options);
     const ct = res.headers.get('content-type') || '';
@@ -424,7 +420,7 @@ async function api(path, options = {}) {
 // ─── Dashboard ───
 async function loadDashboard() {
   const data = await api('/api/dashboard');
-  if (!data) { document.getElementById('last-updated').textContent = 'Worker URL을 설정해주세요'; document.getElementById('config-notice').style.display='flex'; return; }
+  if (!data) { document.getElementById('last-updated').textContent = 'Worker 응답 없음 — 잠시 후 다시 시도'; return; }
   document.getElementById('config-notice').style.display = 'none';
   document.getElementById('last-updated').textContent = '마지막 업데이트: ' + new Date().toLocaleString('ko-KR');
   const t = data.today || {}, m = data.month || {};
@@ -578,7 +574,7 @@ async function initSearchPage() {
 async function doSearch(page=1) {
   const keyword = document.getElementById('search-keyword').value.trim();
   if (!keyword) { alert('키워드를 입력해주세요'); return; }
-  if (!WORKER_URL) { alert('설정에서 Worker URL을 먼저 입력해주세요'); return; }
+  if (!WORKER_URL) return;
   currentKeyword = keyword; currentPage = page;
   document.getElementById('search-grid').innerHTML = '';
   document.getElementById('search-empty').style.display = 'none';
@@ -779,7 +775,7 @@ function renderCostcoTable() {
 }
 
 async function runJob(jobName) {
-  if (!WORKER_URL) { alert('Worker URL을 먼저 설정해주세요'); return; }
+  if (!WORKER_URL) return;
   const result = await api(`/api/run/${jobName}`, {method:'POST'});
   if (result) alert(`✅ ${jobName} 실행 시작!\n로그 탭에서 결과를 확인하세요.`);
 }
@@ -801,11 +797,6 @@ async function submitProduct() {
 }
 
 async function saveSettings() {
-  const url = document.getElementById('setting-worker-url').value.trim().replace(/\/$/,'');
-  if (!url) return;
-  WORKER_URL = url;
-  localStorage.setItem('mobin_worker_url', url);
-  document.getElementById('worker-url-text').textContent = url.replace('https://','').split('.')[0]+'...workers.dev';
   const statusEl = document.getElementById('connection-status');
   statusEl.style.display='block'; statusEl.textContent='연결 테스트 중...'; statusEl.style.color='var(--muted)';
   const result = await api('/api/dashboard');
@@ -814,7 +805,7 @@ async function saveSettings() {
     document.getElementById('config-notice').style.display='none';
     setTimeout(()=>{showPage('dashboard');loadDashboard();},1000);
   } else {
-    statusEl.textContent='❌ 연결 실패. URL을 확인해주세요.'; statusEl.style.color='var(--danger)';
+    statusEl.textContent='❌ 연결 실패.'; statusEl.style.color='var(--danger)';
   }
 }
 
