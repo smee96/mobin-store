@@ -195,18 +195,23 @@
     <div id="page-costco" class="page">
       <div class="topbar">
         <div>
-          <div class="page-title">🏬 코스트코 특가 비교</div>
-          <div class="page-sub" id="costco-sub">코스트코 특가 상품 · 쿠팡 / 네이버쇼핑 검색 연결 제공</div>
+          <div class="page-title">🏬 코스트코 × 트렌드 검색</div>
+          <div class="page-sub" id="costco-sub">코스트코 특가 상품 · 트렌드 키워드 필터링</div>
         </div>
-        <div class="topbar-right">
-          <button class="btn btn-sm btn-outline" onclick="refreshCostco()">↻ 새로고침</button>
+        <div class="topbar-right" style="gap:8px">
+          <button class="btn btn-sm btn-outline" onclick="runJobThenSearch()" id="btn-collect">📥 트렌드 수집</button>
+          <button class="btn btn-sm btn-primary" onclick="refreshCostco()">🔍 상품 새로고침</button>
         </div>
       </div>
 
-      <!-- 안내 배너 -->
-      <div style="background:rgba(108,71,232,.06);border:1px solid rgba(108,71,232,.18);border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size:12px;color:var(--muted);display:flex;align-items:center;gap:10px">
-        <span style="font-size:16px">💡</span>
-        <span>쿠팡 / 네이버 버튼 클릭 → 새 탭에서 검색 결과가 열립니다. <strong>코스트코 가격</strong>은 로그인 전 기준 판매금액이며, 회원 할인·쿠폰 적용 시 총 결제금액이 다를 수 있습니다.</span>
+      <!-- 키워드 태그 -->
+      <div class="card" style="margin-bottom:12px;padding:12px 16px">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <span style="font-size:11px;color:var(--muted);white-space:nowrap">🔑 트렌드 키워드</span>
+          <div id="costco-keyword-tags" style="display:flex;gap:6px;flex-wrap:wrap">
+            <span style="font-size:11px;color:var(--muted)">상품 로드 후 표시됩니다</span>
+          </div>
+        </div>
       </div>
 
       <div class="card" style="padding:0;overflow:hidden">
@@ -216,11 +221,11 @@
               <tr>
                 <th style="min-width:230px;padding-left:16px">상품명</th>
                 <th style="text-align:right">판매금액</th>
-                <th style="text-align:center">단위가 / 할인</th>
+                <th style="text-align:center">할인</th>
                 <th style="text-align:center;color:var(--coupang)">쿠팡 검색</th>
                 <th style="text-align:center;color:#028a4a">네이버쇼핑</th>
-                <th style="text-align:center">행사기간</th>
-                <th style="text-align:center">코스트코 바로가기</th>
+                <th style="text-align:center">쿠팡 등록</th>
+                <th style="text-align:center">코스트코</th>
               </tr>
             </thead>
             <tbody id="costco-tbody">
@@ -231,7 +236,7 @@
       </div>
 
       <div id="costco-more" style="text-align:center;margin-top:20px;display:none">
-        <button class="btn btn-outline" onclick="loadMoreCostco()">+ 20개 더 보기</button>
+        <button class="btn btn-outline" onclick="loadMoreCostco()">+ 더 보기</button>
       </div>
     </div>
 
@@ -652,20 +657,26 @@ async function registerToCoupang(p) {
   }
 }
 
-// ─── 코스트코 특가 ───
+// ─── 코스트코 × 트렌드 ───
 let costcoPage = 0, costcoTotal = 0;
 let costcoAllProducts = [], costcoLoaded = false;
 
-// 코스트코 탭 진입 시 자동 로드
 async function initCostcoPage() {
   if (costcoLoaded && costcoAllProducts.length > 0) return;
   await refreshCostco();
 }
 
+async function runJobThenSearch() {
+  const btn = document.getElementById('btn-collect');
+  btn.disabled = true; btn.textContent = '⏳ 수집 중...';
+  const result = await api('/api/run/trend_collect', {method:'POST'});
+  btn.disabled = false; btn.textContent = '📥 트렌드 수집';
+  if (result) { await refreshCostco(); }
+  else { alert('수집 실패. Worker URL을 확인하세요.'); }
+}
+
 async function refreshCostco() {
-  costcoLoaded = false;
-  costcoAllProducts = [];
-  costcoPage = 0;
+  costcoLoaded = false; costcoAllProducts = []; costcoPage = 0;
   document.getElementById('costco-tbody').innerHTML =
     '<tr><td colspan="7" class="empty"><div class="spinner" style="margin:20px auto 8px"></div><div style="font-size:12px;color:var(--muted)">코스트코 특가 상품 불러오는 중...</div></td></tr>';
   document.getElementById('costco-more').style.display = 'none';
@@ -673,52 +684,79 @@ async function refreshCostco() {
 }
 
 async function loadMoreCostco() {
-  const data = await api(`/api/costco?page=${costcoPage}&size=20`);
+  const data = await api('/api/costco?page=' + costcoPage + '&size=20');
   if (!data) {
     document.getElementById('costco-tbody').innerHTML =
       '<tr><td colspan="7" class="empty">Worker URL을 설정해주세요</td></tr>';
     return;
   }
   costcoTotal = data.total || 0;
-  costcoAllProducts = [...costcoAllProducts, ...data.products];
+  costcoAllProducts = [...costcoAllProducts, ...(data.products || [])];
   costcoPage++;
-  renderCostcoTable();
+
+  // 키워드 태그 표시
+  const tags = document.getElementById('costco-keyword-tags');
+  const kws = data.keywords || [];
+  if (kws.length) {
+    tags.innerHTML = kws.map(k =>
+      '<span style="padding:2px 10px;border-radius:20px;background:rgba(108,71,232,.1);color:var(--accent);font-size:11px">' + escHtml(k) + '</span>'
+    ).join('');
+  } else {
+    tags.innerHTML = '<span style="font-size:11px;color:var(--muted)">트렌드 키워드 없음 — 전체 특가 표시</span>';
+  }
+
   document.getElementById('costco-sub').textContent =
-    `코스트코 특가 ${costcoTotal}개 · ${costcoAllProducts.length}개 표시 · 쿠팡 / 네이버 검색 링크 제공`;
+    '코스트코 특가 ' + costcoTotal + '개 · ' + costcoAllProducts.length + '개 표시';
   document.getElementById('costco-more').style.display = data.hasMore ? 'block' : 'none';
+  renderCostcoTable();
   costcoLoaded = true;
 }
 
-// 코스트코 상품명에서 핵심 키워드 추출 (Worker 없이 프론트에서 직접 처리)
 function extractSearchKeyword(name) {
   return name
-    .replace(/\s*\d+(?:\.\d+)?(?:ml|mL|L|g|kg|m{1,2}|㎊|㎋|매|입|개|롤|정|장|팩|박스|호|미터)[^\s]*/gi, '')
+    .replace(/\s*\d+(?:\.\d+)?(?:ml|mL|L|g|kg|m{1,2}|매|입|개|롤|정|장|팩|박스|호)[^\s]*/gi, '')
     .replace(/\s*(x|×|\*)\s*\d+/gi, '')
     .replace(/\([^)]{1,30}\)/g, '')
-    .replace(/\s{2,}/g, ' ')
-    .trim()
+    .replace(/\s{2,}/g, ' ').trim()
     .split(/\s+/).slice(0, 4).join(' ');
 }
 
-// 코스트코 가격 셀 렌더링
-// - 총결제금액(price) + 판매금액(originalPrice) 취소선 + 할인금액(-discountAmount) / 할인율
-// - 할인 데이터 없으면 판매금액만 단일 표시
+function extractBrand(name) { return name.split(' ')[0] || name; }
+
+function extractOption(name) {
+  const m = name.match(/([\d.]+(?:ml|mL|L|g|kg|매|입|개|롤|정|장|팩)[^\s]*(?:\s*[xX]\s*[\d]+)*)/i);
+  return m ? m[0] : '1개';
+}
+
+function guessCategoryName(name) {
+  const k = name.toLowerCase();
+  if (/tv|티비|텔레비/.test(k)) return 'TV/영상가전';
+  if (/냉장고/.test(k)) return '냉장고';
+  if (/세탁기|건조기/.test(k)) return '세탁기/건조기';
+  if (/청소기/.test(k)) return '청소기';
+  if (/공기청정|제습|가습/.test(k)) return '공기청정기/제습기';
+  if (/에어프라이|밥솥|전자레인지|오븐/.test(k)) return '주방가전';
+  if (/노트북|컴퓨터|태블릿/.test(k)) return '컴퓨터/노트북';
+  if (/이어폰|헤드폰|스피커/.test(k)) return '음향기기';
+  if (/안마의자|안마기/.test(k)) return '안마기/헬스케어';
+  if (/화장품|크림|로션|세럼|샴푸/.test(k)) return '뷰티/헬스';
+  if (/식품|두유|음료|과자/.test(k)) return '식품';
+  if (/건강식품|비타민|프로바이오틱/.test(k)) return '건강식품';
+  if (/휴지|티슈/.test(k)) return '생활용품';
+  return '생활가전';
+}
+
 function renderCostcoPrice(p) {
   const hasDiscount = p.originalPrice && p.price && p.originalPrice !== p.price;
   if (hasDiscount) {
-    // 총결제금액 크게, 판매금액 취소선, 할인금액 빨간색
-    const discLabel = p.discountAmount
-      ? `-${escHtml(p.discountAmount)}`
-      : (p.discount ? `${escHtml(p.discount)} 할인` : '');
-    return `
-      <div class="costco-price-wrap">
-        <div class="costco-price-final">${escHtml(p.price)}</div>
-        <div class="costco-price-orig">${escHtml(p.originalPrice)}</div>
-        ${discLabel ? `<div class="costco-price-disc">${discLabel}</div>` : ''}
-      </div>`;
+    const discLabel = p.discountAmount ? '-' + escHtml(p.discountAmount) : (p.discount ? escHtml(p.discount) + ' 할인' : '');
+    return '<div class="costco-price-wrap">' +
+      '<div class="costco-price-final">' + escHtml(p.price) + '</div>' +
+      '<div class="costco-price-orig">' + escHtml(p.originalPrice) + '</div>' +
+      (discLabel ? '<div class="costco-price-disc">' + discLabel + '</div>' : '') +
+      '</div>';
   }
-  // 할인 없음 → 판매금액 단순 표시
-  return `<div class="costco-price-single">${p.price ? escHtml(p.price) : '—'}</div>`;
+  return '<div class="costco-price-single">' + (p.price ? escHtml(p.price) : '—') + '</div>';
 }
 
 function renderCostcoTable() {
@@ -728,50 +766,142 @@ function renderCostcoTable() {
     return;
   }
   tbody.innerHTML = costcoAllProducts.map((p, idx) => {
-    const kw    = encodeURIComponent(extractSearchKeyword(p.name));
-    const cpUrl = `https://www.coupang.com/np/search?q=${kw}&channel=user&listSize=30&sort=salePriceAsc`;
-    const nvUrl = `https://search.shopping.naver.com/search/all?query=${kw}&sort=price_asc&frm=NVSHATC`;
+    const kw = encodeURIComponent(extractSearchKeyword(p.name));
+    const cpUrl = 'https://www.coupang.com/np/search?q=' + kw + '&channel=user&listSize=30&sort=salePriceAsc';
+    const nvUrl = 'https://search.shopping.naver.com/search/all?query=' + kw + '&sort=price_asc&frm=NVSHATC';
     const rowBg = idx % 2 === 0 ? '' : 'background:rgba(0,0,0,.012)';
-    return `
-    <tr style="${rowBg}">
-      <td style="padding-left:16px">
-        <div class="product-col">
-          ${p.imageUrl
-            ? `<img class="costco-thumb" src="${escHtml(p.imageUrl)}" alt="" loading="lazy" onerror="this.src='';this.style.display='none'">`
-            : `<div class="costco-thumb" style="display:flex;align-items:center;justify-content:center;font-size:18px">🛒</div>`}
-          <div>
-            <div class="costco-name" title="${escHtml(p.name)}">${escHtml(p.name)}</div>
-            <div class="costco-period">${escHtml(extractSearchKeyword(p.name))}</div>
-          </div>
-        </div>
-      </td>
-      <td style="text-align:right">
-        ${renderCostcoPrice(p)}
-        ${p.isSoldOut ? '<div style="font-size:10px;color:var(--danger);margin-top:2px">품절</div>' : ''}
-      </td>
-      <td style="text-align:center">
-        <div style="font-size:11px;color:var(--muted)">${p.unit ? escHtml(p.unit) : '—'}</div>
-        ${p.discount ? `<div style="font-size:10px;color:var(--danger);font-family:var(--mono)">↓${escHtml(p.discount)}</div>` : ''}
-      </td>
-      <td style="text-align:center">
-        <a href="${cpUrl}" target="_blank" rel="noopener" class="search-link-btn btn-coupang-link">
-          💰 쿠팡에서 검색 ↗
-        </a>
-      </td>
-      <td style="text-align:center">
-        <a href="${nvUrl}" target="_blank" rel="noopener" class="search-link-btn btn-naver-link">
-          💰 네이버에서 검색 ↗
-        </a>
-      </td>
-      <td style="text-align:center;font-size:11px;color:var(--muted);white-space:nowrap">
-        ${p.period ? escHtml(p.period).replace(' - ','<br>') : '—'}
-      </td>
-      <td style="text-align:center">
-        <a href="${escHtml(p.url)}" target="_blank" rel="noopener"
-           class="btn btn-outline btn-sm" style="font-size:11px;padding:4px 10px">코스트코↗</a>
-      </td>
-    </tr>`;
+    const pJson = encodeURIComponent(JSON.stringify(p));
+    return '<tr style="' + rowBg + '">' +
+      '<td style="padding-left:16px"><div class="product-col">' +
+        (p.imageUrl ? '<img class="costco-thumb" src="' + escHtml(p.imageUrl) + '" alt="" loading="lazy" onerror="this.style.display=\'none\'">' :
+          '<div class="costco-thumb" style="display:flex;align-items:center;justify-content:center;font-size:18px">🛒</div>') +
+        '<div><div class="costco-name" title="' + escHtml(p.name) + '">' + escHtml(p.name) + '</div>' +
+        '<div class="costco-period">' + escHtml(extractSearchKeyword(p.name)) + '</div></div>' +
+      '</div></td>' +
+      '<td style="text-align:right">' + renderCostcoPrice(p) +
+        (p.isSoldOut ? '<div style="font-size:10px;color:var(--danger)">품절</div>' : '') + '</td>' +
+      '<td style="text-align:center">' +
+        (p.discount ? '<div style="font-size:11px;color:var(--danger);font-weight:600">↓' + escHtml(p.discount) + '</div>' : '—') + '</td>' +
+      '<td style="text-align:center"><a href="' + cpUrl + '" target="_blank" rel="noopener" class="search-link-btn btn-coupang-link">💰 쿠팡 ↗</a></td>' +
+      '<td style="text-align:center"><a href="' + nvUrl + '" target="_blank" rel="noopener" class="search-link-btn btn-naver-link">💰 네이버 ↗</a></td>' +
+      '<td style="text-align:center"><button class="btn btn-coupang btn-sm" style="font-size:11px" onclick="registerCostcoToCoupang(decodeProduct(\'' + pJson + '\'))">🛒 등록</button></td>' +
+      '<td style="text-align:center"><a href="' + escHtml(p.url) + '" target="_blank" rel="noopener" class="btn btn-outline btn-sm" style="font-size:11px;padding:4px 8px">↗</a></td>' +
+    '</tr>';
   }).join('');
+}
+
+function decodeProduct(encoded) {
+  try { return JSON.parse(decodeURIComponent(encoded)); } catch { return {}; }
+}
+
+// ── 쿠팡 등록 모달 ──
+let crmProduct = null;
+
+function registerCostcoToCoupang(p) {
+  crmProduct = p;
+  document.getElementById('crm-image').src = p.imageUrl || '';
+  document.getElementById('crm-name-preview').textContent = p.name;
+  document.getElementById('crm-costco-price').textContent = p.price;
+  document.getElementById('crm-brand').value = extractBrand(p.name);
+  document.getElementById('crm-manufacturer').value = extractBrand(p.name);
+  document.getElementById('crm-title').value = p.name;
+  document.getElementById('crm-category-name').value = guessCategoryName(p.name);
+  document.getElementById('crm-option').value = extractOption(p.name);
+  document.getElementById('crm-margin').value = 15;
+  document.getElementById('crm-fee').value = 5.5;
+  document.getElementById('crm-stock').value = 99;
+  document.getElementById('crm-keyword').value = extractSearchKeyword(p.name);
+  document.getElementById('crm-shipping-days').value = 2;
+
+  const imgs = p.allImages || (p.imageUrl ? [p.imageUrl] : []);
+  document.getElementById('crm-images-preview').innerHTML = imgs.slice(0, 5).map((url, i) =>
+    '<div style="position:relative">' +
+    '<img src="' + url + '" style="width:64px;height:64px;object-fit:cover;border-radius:8px;border:2px solid ' + (i===0?'var(--accent)':'var(--border)') + '" onerror="this.parentElement.style.display=\'none\'">' +
+    (i===0 ? '<div style="position:absolute;bottom:2px;left:0;right:0;text-align:center;font-size:9px;background:var(--accent);color:#fff;border-radius:0 0 6px 6px">대표</div>' : '') +
+    '</div>'
+  ).join('');
+
+  recalcCrm();
+  document.getElementById('coupang-register-modal').style.display = 'flex';
+}
+
+function recalcCrm() {
+  if (!crmProduct) return;
+  const margin = parseFloat(document.getElementById('crm-margin').value) || 0;
+  const sellPrice = Math.ceil(crmProduct.priceNum * (1 + margin / 100) / 10) * 10;
+  document.getElementById('crm-price').value = sellPrice;
+  updateCrmCalc(crmProduct.priceNum, sellPrice);
+}
+
+function recalcCrmFromPrice() {
+  if (!crmProduct) return;
+  const sell = parseInt(document.getElementById('crm-price').value) || 0;
+  if (crmProduct.priceNum > 0) {
+    document.getElementById('crm-margin').value = ((sell - crmProduct.priceNum) / crmProduct.priceNum * 100).toFixed(1);
+  }
+  updateCrmCalc(crmProduct.priceNum, sell);
+}
+
+function updateCrmCalc(cost, sell) {
+  const fee = parseFloat(document.getElementById('crm-fee').value) || 5.5;
+  const feeAmt = Math.round(sell * fee * 1.1 / 100);
+  const net = sell - cost - feeAmt;
+  const netPct = cost > 0 ? (net / cost * 100).toFixed(1) : 0;
+  document.getElementById('crm-calc-cost').textContent = cost.toLocaleString('ko-KR') + '원';
+  document.getElementById('crm-calc-sell').textContent = sell.toLocaleString('ko-KR') + '원';
+  document.getElementById('crm-fee-label').textContent = '수수료 (' + fee + '% + VAT)';
+  document.getElementById('crm-calc-fee').textContent = '-' + feeAmt.toLocaleString('ko-KR') + '원';
+  document.getElementById('crm-calc-net').textContent = net.toLocaleString('ko-KR') + '원';
+  document.getElementById('crm-calc-net').style.color = net >= 0 ? 'var(--success)' : 'var(--danger)';
+  document.getElementById('crm-calc-net-pct').textContent = netPct + '%';
+  document.getElementById('crm-calc-net-pct').style.color = net >= 0 ? 'var(--success)' : 'var(--danger)';
+}
+
+function closeCoupangModal() {
+  document.getElementById('coupang-register-modal').style.display = 'none';
+  crmProduct = null;
+}
+
+async function submitCoupangRegister() {
+  const title = document.getElementById('crm-title').value.trim();
+  const price = parseInt(document.getElementById('crm-price').value) || 0;
+  const keyword = document.getElementById('crm-keyword').value.trim();
+  const brand = document.getElementById('crm-brand').value.trim();
+  const option = document.getElementById('crm-option').value.trim();
+  const stock = parseInt(document.getElementById('crm-stock').value) || 99;
+  const shippingDays = parseInt(document.getElementById('crm-shipping-days').value) || 2;
+  if (!title) { alert('상품명을 입력하세요.'); return; }
+  if (price <= 0) { alert('판매가격을 입력하세요.'); return; }
+  const fee = parseFloat(document.getElementById('crm-fee').value) || 5.5;
+  const feeAmt = Math.round(price * fee * 1.1 / 100);
+  const net = price - (crmProduct?.priceNum || 0) - feeAmt;
+  if (net < 0 && !confirm('실수익 ' + net.toLocaleString('ko-KR') + '원으로 손실 예상\n계속 등록하시겠습니까?')) return;
+  const btn = document.getElementById('crm-submit-btn');
+  btn.disabled = true; btn.textContent = '⏳ 등록 중...';
+  const result = await api('/api/coupang/register', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({
+      title, keyword, brand,
+      option_name: option,
+      stock_quantity: stock,
+      outbound_shipping_days: shippingDays,
+      suggested_sell_price: price,
+      costco_price: crmProduct?.priceNum || 0,
+      image_url: crmProduct?.imageUrl || '',
+      all_images: crmProduct?.allImages || (crmProduct?.imageUrl ? [crmProduct.imageUrl] : []),
+      detail_url: crmProduct?.url || '',
+    }),
+  });
+  btn.disabled = false; btn.textContent = '✅ 쿠팡 등록하기';
+  if (result?.success) {
+    closeCoupangModal();
+    alert('✅ 쿠팡 등록 완료!\n' + (result.coupangUrl || ''));
+  } else {
+    let msg = '등록 실패: ' + (result?.error || '알 수 없는 오류');
+    if (result?._debug) msg += '\n\n[Debug]\n' + JSON.stringify(result._debug, null, 2);
+    alert(msg);
+  }
 }
 
 async function runJob(jobName) {
@@ -833,5 +963,92 @@ function compLevel(count) {
 }
 function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 </script>
+
+<!-- 쿠팡 등록 모달 -->
+<div id="coupang-register-modal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.6);align-items:flex-start;justify-content:center;overflow-y:auto;padding:20px 0">
+  <div style="background:var(--bg2);border-radius:16px;width:600px;max-width:96vw;box-shadow:0 20px 60px rgba(0,0,0,0.4);margin:auto">
+    <div style="padding:18px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;border-radius:16px 16px 0 0;background:var(--bg2)">
+      <div><div style="font-size:15px;font-weight:700">🛒 쿠팡 상품 등록</div><div style="font-size:11px;color:var(--muted);margin-top:2px">정보 확인 후 등록하세요</div></div>
+      <button onclick="closeCoupangModal()" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--muted)">✕</button>
+    </div>
+    <div style="padding:14px 24px;background:var(--bg3);border-bottom:1px solid var(--border);display:flex;gap:12px;align-items:center">
+      <img id="crm-image" src="" alt="" style="width:68px;height:68px;object-fit:cover;border-radius:10px;flex-shrink:0" onerror="this.style.display='none'">
+      <div style="flex:1;min-width:0">
+        <div id="crm-name-preview" style="font-size:13px;font-weight:600;margin-bottom:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></div>
+        <div style="font-size:12px;color:var(--muted)">코스트코 원가: <span id="crm-costco-price" style="color:var(--accent);font-weight:700"></span></div>
+      </div>
+    </div>
+    <div style="padding:18px 24px;display:flex;flex-direction:column;gap:16px">
+      <div>
+        <div style="font-size:12px;font-weight:700;margin-bottom:8px">① 브랜드 / 제조사</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">브랜드명</label><input id="crm-brand" class="form-input" style="width:100%;box-sizing:border-box"></div>
+          <div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">제조사</label><input id="crm-manufacturer" class="form-input" style="width:100%;box-sizing:border-box"></div>
+        </div>
+      </div>
+      <div>
+        <div style="font-size:12px;font-weight:700;margin-bottom:6px">② 노출 상품명 <span style="color:var(--danger)">*</span></div>
+        <input id="crm-title" class="form-input" style="width:100%;box-sizing:border-box">
+      </div>
+      <div>
+        <div style="font-size:12px;font-weight:700;margin-bottom:6px">③ 카테고리 (자동 추천)</div>
+        <input id="crm-category-name" class="form-input" style="width:100%;box-sizing:border-box" readonly>
+      </div>
+      <div>
+        <div style="font-size:12px;font-weight:700;margin-bottom:6px">④ 옵션명 (중량/수량)</div>
+        <input id="crm-option" class="form-input" style="width:100%;box-sizing:border-box">
+      </div>
+      <div>
+        <div style="font-size:12px;font-weight:700;margin-bottom:8px">⑤ 가격 / 재고</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px">
+          <div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">마진율(%)</label><input id="crm-margin" class="form-input" type="number" value="15" style="width:100%;box-sizing:border-box" oninput="recalcCrm()"></div>
+          <div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">수수료(%)</label><input id="crm-fee" class="form-input" type="number" value="5.5" step="0.1" style="width:100%;box-sizing:border-box" oninput="recalcCrm()"></div>
+          <div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">판매가(원) <span style="color:var(--danger)">*</span></label><input id="crm-price" class="form-input" type="number" style="width:100%;box-sizing:border-box" oninput="recalcCrmFromPrice()"></div>
+          <div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">재고수량</label><input id="crm-stock" class="form-input" type="number" value="99" style="width:100%;box-sizing:border-box"></div>
+        </div>
+      </div>
+      <div style="background:rgba(108,71,232,.06);border:1px solid rgba(108,71,232,.15);border-radius:8px;padding:12px;font-size:12px">
+        <div style="font-size:11px;font-weight:700;color:var(--accent);margin-bottom:8px">💰 수익 계산</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">
+          <div style="display:flex;justify-content:space-between"><span style="color:var(--muted)">원가</span><span id="crm-calc-cost" style="font-weight:600"></span></div>
+          <div style="display:flex;justify-content:space-between"><span style="color:var(--muted)">판매가</span><span id="crm-calc-sell" style="font-weight:600;color:var(--accent)"></span></div>
+          <div style="display:flex;justify-content:space-between"><span id="crm-fee-label" style="color:var(--muted)">수수료</span><span id="crm-calc-fee" style="color:var(--danger);font-weight:600"></span></div>
+          <div style="display:flex;justify-content:space-between;border-top:1px solid rgba(108,71,232,.15);padding-top:4px;margin-top:2px;grid-column:1/-1">
+            <span style="font-weight:700">실수익</span><span id="crm-calc-net" style="font-weight:700;font-size:13px"></span>
+            <span style="color:var(--muted);margin-left:8px">실수익률</span><span id="crm-calc-net-pct" style="font-weight:700"></span>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div style="font-size:12px;font-weight:700;margin-bottom:6px">⑥ 검색 키워드</div>
+        <input id="crm-keyword" class="form-input" style="width:100%;box-sizing:border-box">
+      </div>
+      <div>
+        <div style="font-size:12px;font-weight:700;margin-bottom:8px">⑦ 상품 이미지 (첫번째=대표)</div>
+        <div id="crm-images-preview" style="display:flex;gap:8px;flex-wrap:wrap"></div>
+      </div>
+      <div>
+        <div style="font-size:12px;font-weight:700;margin-bottom:8px">⑧ 출고일</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <input id="crm-shipping-days" class="form-input" type="number" value="2" min="1" max="14" style="width:70px;box-sizing:border-box">
+          <span style="font-size:12px;color:var(--muted)">일 이내 출고 · 배송비: 무료</span>
+        </div>
+      </div>
+      <div style="background:var(--bg3);border-radius:8px;padding:12px;font-size:12px;color:var(--muted)">
+        <div style="font-weight:700;margin-bottom:6px">⑨~⑩ 자동 처리 항목</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">
+          <div>✅ 인증·신고 대상 아님</div><div>✅ 병행수입 아님</div>
+          <div>✅ 과세</div><div>✅ 미성년자 구매 가능</div>
+          <div>✅ 상품정보제공고시: 상세페이지 참조</div>
+          <div>✅ 반품지: 광명사무실</div>
+        </div>
+      </div>
+    </div>
+    <div style="padding:14px 24px;border-top:1px solid var(--border);display:flex;gap:10px;border-radius:0 0 16px 16px;background:var(--bg2)">
+      <button onclick="closeCoupangModal()" class="btn btn-outline" style="flex:1">취소</button>
+      <button onclick="submitCoupangRegister()" class="btn btn-coupang" style="flex:2" id="crm-submit-btn">✅ 쿠팡 등록하기</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>

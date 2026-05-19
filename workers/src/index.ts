@@ -1,8 +1,8 @@
 import { Env } from './types';
 import { handleScheduled } from './scheduler';
 import { search1688 } from './search1688';
-import { registerCoupangProduct, getCoupangProduct, convertToCoupangProduct } from './coupang';
-import { crawlCostcoDeals } from './costco';
+import { registerCoupangProduct, getCoupangProduct, convertToCoupangProduct, getCoupangDisplayCategories, fetchReturnCenterCode } from './coupang';
+import { getCostcoDealsByKeywords } from './costco';
 import { comparePrices } from './priceCompare';
 
 export default {
@@ -61,15 +61,18 @@ export default {
 
       if (path === '/api/coupang/register' && request.method === 'POST') {
         const body = await request.json() as any;
-        const { title, keyword, suggested_sell_price, image_url, detail_url, id: productDbId } = body;
-        if (!title || !keyword) return json({ error: 'title, keyword 필수' }, 400);
+        const { title, keyword, suggested_sell_price, image_url, all_images, detail_url, costco_price, id: productDbId } = body;
+        if (!title) return json({ error: 'title 필수' }, 400);
 
-        const coupangProduct = convertToCoupangProduct(env, {
+        const coupangProduct = await convertToCoupangProduct(env, {
           title,
-          keyword,
+          keyword: keyword || title.split(' ').slice(0, 3).join(' '),
           suggested_sell_price: suggested_sell_price || 20000,
           image_url: image_url || '',
+          all_images: all_images || (image_url ? [image_url] : []),
           detail_url: detail_url || '',
+          costco_price: costco_price || 0,
+          return_center_code: (env as any).COUPANG_RETURN_CENTER_CODE || '',
         });
 
         const result = await registerCoupangProduct(env, coupangProduct);
@@ -95,8 +98,57 @@ export default {
 
           return json({ success: true, productId: result.productId, coupangUrl, message: '쿠팡에 상품이 등록되었습니다!' }, 201);
         } else {
-          return json({ success: false, error: result.error }, 400);
+          return json({ success: false, error: result.error, _debug: (result as any)._debug }, 400);
         }
+      }
+
+      // GET /api/coupang/categories?keyword=xxx  — 유효한 카테고리 ID 탐색용
+      if (path === '/api/coupang/categories' && request.method === 'GET') {
+        const keyword = url.searchParams.get('keyword') || '';
+        const debug = url.searchParams.get('debug') === '1';
+
+        // debug=1 이면 반품센터 목록 + 카테고리 메타 raw 응답 반환
+        if (debug) {
+          const proxyCall = async (p: string) => {
+            const res = await fetch(`https://proxy.mobin-inc.com/proxy/coupang`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'x-proxy-secret': 'mobin-proxy-2024-xK9mP3nQ' },
+              body: JSON.stringify({ path: p, method: 'GET', accessKey: env.COUPANG_ACCESS_KEY, secretKey: env.COUPANG_SECRET_KEY }),
+            });
+            return { status: res.status, data: await res.json() as any };
+          };
+          const catCode = url.searchParams.get('catCode') || '59411';
+          // 반품센터: 여러 경로 시도
+          const rcPaths = [
+            `/v2/providers/seller_api/apis/api/v1/marketplace/vendor/${env.COUPANG_VENDOR_ID}/return-ship-place-list`,
+            `/v2/providers/seller_api/apis/api/v1/marketplace/meta/return-ship-place-list`,
+            `/v2/providers/seller_api/apis/api/v1/marketplace/seller-return-centers`,
+          ];
+          const rcResults: any[] = [];
+          for (const p of rcPaths) {
+            const r = await proxyCall(p);
+            rcResults.push({ path: p.split('/').pop(), status: r.status, code: r.data.code, msg: (r.data.message || '').slice(0, 80) });
+          }
+          // 카테고리 메타: noticeCategories 만 추출
+          const meta = await proxyCall(`/v2/providers/seller_api/apis/api/v1/marketplace/meta/category-related-metas/display-category-codes/${catCode}`);
+          const noticeCategories = meta.data.data?.noticeCategories;
+          return json({
+            returnCenterTests: rcResults,
+            categoryMeta: {
+              status: meta.status, code: meta.data.code,
+              noticeCategories: JSON.stringify(noticeCategories).slice(0, 1000),
+              keys: Object.keys(meta.data.data || {}),
+            },
+          });
+        }
+
+        const categories = await getCoupangDisplayCategories(env);
+        const filtered = keyword
+          ? categories.filter(c =>
+              c.fullName.includes(keyword) || c.name.includes(keyword)
+            )
+          : categories.slice(0, 100);
+        return json({ total: categories.length, results: filtered });
       }
 
       // GET /api/coupang/product/:id
@@ -250,7 +302,7 @@ export default {
         const size = parseInt(url.searchParams.get('size') || '20');
         const nocache = url.searchParams.get('nocache') === '1';
 
-        const cacheKey = `costco:page:${page}:${size}`;
+        const cacheKey = `costco:deals:${new Date().toISOString().slice(0, 10)}:${page}`;
 
         if (!nocache) {
           const cached = await env.CACHE.get(cacheKey);
@@ -261,11 +313,42 @@ export default {
           }
         }
 
-        const data = await crawlCostcoDeals(page, size);
+        // 오늘 트렌드 키워드 가져오기
+        const trendRows = await env.DB.prepare(
+          `SELECT keyword FROM trend_keywords ORDER BY trend_score DESC LIMIT 20`
+        ).all();
+        const keywords = (trendRows.results as any[]).map(r => r.keyword);
+
+        const data = await getCostcoDealsByKeywords(keywords, page, size);
         const resultJson = JSON.stringify(data);
-        // 10분 캐시 (nocache=1이어도 결과 자체는 캐싱해서 다음 요청엔 활용)
         await env.CACHE.put(cacheKey, resultJson, { expirationTtl: 600 });
 
+        return new Response(resultJson, {
+          headers: { 'Content-Type': 'application/json', ...corsHeaders },
+        });
+      }
+
+            if (path === '/api/costco/search-all' && request.method === 'GET') {
+        const nocache = url.searchParams.get('nocache') === '1';
+        const cacheKey = `costco:all:${new Date().toISOString().slice(0, 10)}`;
+        if (!nocache) {
+          const cached = await env.CACHE.get(cacheKey);
+          if (cached) {
+            return new Response(cached, {
+              headers: { 'Content-Type': 'application/json', ...corsHeaders, 'X-Cache': 'HIT' },
+            });
+          }
+        }
+        const trendRows = await env.DB.prepare(
+          `SELECT keyword FROM trend_keywords ORDER BY trend_score DESC LIMIT 10`
+        ).all();
+        const keywords = (trendRows.results as any[]).map(r => r.keyword);
+        if (!keywords.length) return json({ error: '트렌드 키워드가 없습니다. 먼저 트렌드 수집을 실행하세요.' }, 400);
+
+        const { searchCostcoByTrendKeywords } = await import('./costco');
+        const result = await searchCostcoByTrendKeywords(keywords, 10);
+        const resultJson = JSON.stringify(result);
+        await env.CACHE.put(cacheKey, resultJson, { expirationTtl: 3600 });
         return new Response(resultJson, {
           headers: { 'Content-Type': 'application/json', ...corsHeaders },
         });

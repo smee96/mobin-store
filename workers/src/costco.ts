@@ -13,190 +13,143 @@ export interface CostcoProduct {
   maxPurchase: string;
   isSoldOut: boolean;
   isMemberOnly: boolean;
+  matchedKeyword?: string;
+  rating?: number;
+  reviewCount?: number;
+  allImages?: string[];
 }
 
-export async function crawlCostcoDeals(page: number = 0, pageSize: number = 20): Promise<{
+const PROXY_URL = 'https://proxy.mobin-inc.com';
+const PROXY_SECRET = 'mobin-proxy-2024-xK9mP3nQ';
+
+// ── 특가 상품 전체 조회 (트렌드 키워드 필터링 포함) ──
+export async function getCostcoDealsByKeywords(
+  keywords: string[],
+  page: number = 0,
+  pageSize: number = 20
+): Promise<{
   products: CostcoProduct[];
   total: number;
   hasMore: boolean;
+  keywords: string[];
+  mode: string;
 }> {
-  const res = await fetch('https://www.costco.co.kr/Special-Price-Offers/c/SpecialPriceOffers', {
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-      'Accept-Language': 'ko-KR,ko;q=0.9',
-    },
+  const url = `${PROXY_URL}/proxy/costco?category=SpecialPriceOffers&pageSize=100&page=0`;
+
+  const res = await fetch(url, {
+    headers: { 'x-proxy-secret': PROXY_SECRET },
   });
 
-  if (!res.ok) throw new Error(`페이지 로드 실패: ${res.status}`);
-  const html = await res.text();
+  if (!res.ok) throw new Error(`프록시 오류: ${res.status}`);
+  const data = await res.json() as any;
 
-  const products = parseAllProducts(html);
+  let products: CostcoProduct[] = (data.products || []).map((p: any) => parseCostcoProduct(p));
+
+  // 트렌드 키워드 필터링
+  if (keywords.length > 0) {
+    const filtered = products.filter(p =>
+      keywords.some(kw =>
+        p.name.toLowerCase().includes(kw.toLowerCase()) ||
+        kw.toLowerCase().split(' ').some((w: string) => w.length > 1 && p.name.includes(w))
+      )
+    );
+    // 매칭 결과가 너무 적으면 전체 반환
+    if (filtered.length >= 3) {
+      products = filtered.map(p => ({
+        ...p,
+        matchedKeyword: keywords.find(kw => p.name.toLowerCase().includes(kw.toLowerCase()))
+      }));
+    }
+  }
+
+  const total = products.length;
   const start = page * pageSize;
   const sliced = products.slice(start, start + pageSize);
 
   return {
     products: sliced,
-    total: products.length,
-    hasMore: start + pageSize < products.length,
+    total,
+    hasMore: start + pageSize < total,
+    keywords,
+    mode: 'special_price',
   };
 }
 
-function parseAllProducts(html: string): CostcoProduct[] {
-  /**
-   * 실제 HTML 구조 (위치 순서):
-   *   1) href="/...../p/{code}" (URL, 3번 반복)
-   *   2) alt="{상품명}"          (이름, URL 직후)
-   *   3) checkbox-compare-{code} (체크박스, 이름 뒤)
-   *   4) 가격, 단위, 기간 등      (체크박스 뒤)
-   *
-   * → URL + alt가 쌍으로 나타나는 패턴을 직접 추출
-   */
+// ── 키워드로 코스트코 검색 ──
+export async function searchCostcoByKeyword(
+  keyword: string,
+  page: number = 0,
+  pageSize: number = 20
+): Promise<{
+  products: CostcoProduct[];
+  total: number;
+  hasMore: boolean;
+  keyword: string;
+}> {
+  const url = `${PROXY_URL}/proxy/costco?keyword=${encodeURIComponent(keyword)}&page=${page}&pageSize=${pageSize}`;
 
-  const products: CostcoProduct[] = [];
-  const seen = new Set<string>();
+  const res = await fetch(url, {
+    headers: { 'x-proxy-secret': PROXY_SECRET },
+  });
 
-  // URL 첫 등장 위치 목록 (각 상품마다 3번 반복되므로 첫 번째만 사용)
-  const urlReg = /href="(\/[^"]+\/p\/(\d+))"/g;
-  const urlMatches: Array<{ pos: number; url: string; code: string }> = [];
+  if (!res.ok) throw new Error(`프록시 오류: ${res.status}`);
+  const data = await res.json() as any;
 
-  let m: RegExpExecArray | null;
-  while ((m = urlReg.exec(html)) !== null) {
-    const code = m[2];
-    if (!seen.has(code)) {
-      seen.add(code);
-      urlMatches.push({ pos: m.index, url: m[1], code });
-    }
-  }
+  const products = (data.products || []).map((p: any) => parseCostcoProduct(p, keyword));
+  const total = data.pagination?.totalResults ?? products.length;
 
-  for (let i = 0; i < urlMatches.length; i++) {
-    const { pos, url, code } = urlMatches[i];
-    const nextPos = i + 1 < urlMatches.length ? urlMatches[i + 1].pos : pos + 15000;
-
-    // 이 상품의 블록: 첫 URL 등장 ~ 다음 상품 첫 URL 등장
-    const block = html.slice(pos, nextPos);
-
-    try {
-      const product = parseProductBlock(code, url, block, html, pos);
-      if (product?.name) products.push(product);
-    } catch (_) {
-      // skip
-    }
-  }
-
-  return products;
+  return {
+    products,
+    total,
+    hasMore: (page + 1) * pageSize < total,
+    keyword,
+  };
 }
 
-function parseProductBlock(
-  code: string,
-  relUrl: string,
-  block: string,
-  fullHtml: string,
-  blockStart: number
-): CostcoProduct | null {
+// ── 코스트코 API 응답 → CostcoProduct 변환 ──
+function parseCostcoProduct(p: any, keyword?: string): CostcoProduct {
+  const code = p.code || p.id || String(Math.random());
+  const name = p.name || '';
 
-  // ── 상품명: URL 직후 alt 속성 ──
-  const altMatch = block.match(/alt="([^"&]{5,120})"/);
-  const name = altMatch ? decodeHtml(altMatch[1]) : '';
-  if (!name || name === '&quot;&quot;') return null;
+  // 이미지
+  const images = p.images || [];
+  const thumb = images.find((i: any) => i.imageType === 'PRIMARY') || images[0];
+  const imageUrl = thumb?.url
+    ? (thumb.url.startsWith('http') ? thumb.url : `https://www.costco.co.kr${thumb.url}`)
+    : '';
 
-  // ── 이미지: contentstack CDN 우선, 없으면 일반 이미지 ──
-  const imgMatch = block.match(/src="(https:\/\/(?:azure-na-images|images)\.contentstack[^"]+)"/i)
-    ?? block.match(/src="(https:\/\/[^"]+\.(?:jpg|jpeg|png|webp)[^"]*)"/i);
-  const imageUrl = imgMatch?.[1] ?? '';
+  // 가격 (이미 할인 적용된 최종가)
+  const priceNum = p.price?.value ?? 0;
+  const price = p.price?.formattedValue ?? '';
 
-  // ── 가격 파싱 ──
-  // 코스트코 HTML 구조 (목록 페이지 SSR 기준):
-  //   class="original-price"  → 판매금액 (notranslate span)
-  //   class="price-original"  → 판매금액 (상세 페이지용, price-tag + notranslate)
-  //   class="discount"        → 할인 블록 (discount-tag, discount-value - JS 동적 렌더)
-  //   class="price-after-discount" → 총 결제금액 (you-pay-value - JS 동적 렌더)
-  //
-  // 주의: 할인금액/총결제금액은 로그인 후 클라이언트JS가 동적으로 렌더링.
-  // SSR HTML에서는 original-price(판매금액)만 추출 가능.
+  // 할인 금액 (promotions에서 추출)
+  const promos = p.promotions || [];
+  const discountNum = promos[0]?.discount?.value ?? 0;
+  const discountAmount = discountNum > 0 ? discountNum.toLocaleString('ko-KR') + '원' : '';
+  const originalPriceNum = discountNum > 0 ? priceNum + discountNum : 0;
+  const originalPrice = originalPriceNum > 0
+    ? originalPriceNum.toLocaleString('ko-KR') + '원' : '';
+  const discount = discountNum > 0 && originalPriceNum > 0
+    ? Math.round((discountNum / originalPriceNum) * 100) + '%' : '';
 
-  // 1) original-price 클래스에서 판매금액 추출
-  const origPriceMatch = block.match(
-    /class="original-price[^"]*"[^>]*>.*?class="(?:product-price-amount|price-value)[^"]*"[^>]*>.*?class="notranslate[^"]*">\s*([\d,]+원)\s*</s
-  ) ?? block.match(
-    /class="original-price[^"]*"[^>]*>[\s\S]*?notranslate[^>]*>\s*([\d,]+원)\s*</
-  );
-  
-  // 2) 폴백: price-original 클래스 (상세 페이지 호환)
-  const priceOriginalMatch = !origPriceMatch ? block.match(
-    /class="price-original[^"]*"[^>]*>[\s\S]*?notranslate[^>]*>\s*([\d,]+원)\s*</
-  ) : null;
+  // 행사기간
+  const period = promos[0]?.endDate ? `~ ${promos[0].endDate}` : '';
 
-  // 3) 최종 폴백: notranslate 첫 번째 값
-  const sellingPriceStr: string = origPriceMatch
-    ? origPriceMatch[1].trim()
-    : priceOriginalMatch
-      ? priceOriginalMatch[1].trim()
-      : (block.match(/notranslate[^>]+>\s*([\d,]+원)\s*</)?.[1]?.trim() ?? '');
+  const isSoldOut = p.stock?.stockLevelStatus === 'outOfStock' || false;
+  const isMemberOnly = p.memberOnly ?? false;
+  const rating = p.averageRating ?? 0;
+  const reviewCount = p.numberOfReviews ?? 0;
 
-  const sellingPriceNum = parseInt(sellingPriceStr.replace(/[^0-9]/g, '') || '0');
-
-  // ── 할인 정보 (SSR에서는 대부분 비어있음, 향후 확장용) ──
-  // price-tag "할인금액" 패턴
-  const discTagMatch = block.match(/class="price-tag[^"]*">할인금액<\/span>[\s\S]*?notranslate[^>]*>\s*([\d,]+원)\s*</);
-  // discount-value 패턴
-  const discValueMatch = !discTagMatch
-    ? block.match(/class="discount-value[^"]*"[^>]*>[\s\S]*?notranslate[^>]*>\s*([\d,]+원)\s*</)
-    : null;
-  // 음수(-) 가격 패턴 (할인금액 표시)
-  const negPriceMatch = !discTagMatch && !discValueMatch
-    ? block.match(/notranslate[^>]*>\s*-\s*([\d,]+원)\s*</)
-    : null;
-
-  const discountAmount = (discTagMatch?.[1] ?? discValueMatch?.[1] ?? negPriceMatch?.[1] ?? '').trim();
-  const discountNum = parseInt(discountAmount.replace(/[^0-9]/g, '') || '0');
-
-  // ── 총 결제금액 (you-pay-value 클래스, SSR 미지원으로 대부분 비어있음) ──
-  const youPayMatch = block.match(/class="you-pay-value[^"]*"[^>]*>[\s\S]*?notranslate[^>]*>\s*([\d,]+원)\s*</);
-  const finalPriceStr = youPayMatch?.[1]?.trim() ?? '';
-  const finalPriceNum = parseInt(finalPriceStr.replace(/[^0-9]/g, '') || '0');
-
-  // price / originalPrice / discount / discountAmount 최종 결정
-  // 총결제금액(finalPriceNum)이 있으면 → price=총결제금액, originalPrice=판매금액
-  // 할인금액(discountNum)만 있으면   → price=판매금액,    originalPrice=판매금액+할인금액
-  // 아무것도 없으면                  → price=판매금액,    나머지 빈 문자열
-  let price: string;
-  let priceNum: number;
-  let originalPrice: string;
-  let discount: string;
-
-  if (finalPriceNum > 0 && sellingPriceNum > 0 && finalPriceNum < sellingPriceNum) {
-    price = finalPriceStr;
-    priceNum = finalPriceNum;
-    originalPrice = sellingPriceStr;
-    const savedNum = sellingPriceNum - finalPriceNum;
-    discount = Math.round((savedNum / sellingPriceNum) * 100) + '%';
-  } else if (sellingPriceNum > 0 && discountNum > 0) {
-    price = sellingPriceStr;
-    priceNum = sellingPriceNum;
-    originalPrice = (sellingPriceNum + discountNum).toLocaleString('ko-KR') + '원';
-    discount = Math.round((discountNum / (sellingPriceNum + discountNum)) * 100) + '%';
-  } else {
-    price = sellingPriceStr;
-    priceNum = sellingPriceNum;
-    originalPrice = '';
-    discount = '';
-  }
-
-  // ── 행사기간: YYYY/MM/DD 두 개 ──
-  const dates = [...block.matchAll(/(\d{4}\/\d{2}\/\d{2})/g)].map(m => m[1]);
-  const period = dates.length >= 2 ? `${dates[0]} - ${dates[1]}` : '';
-
-  // ── 단위 정보 ──
-  const unitMatch = block.match(/([\d,]+(?:㎖|g|미터|개|㎡|kg)당\s*[\d,]+원)/);
-  const unit = unitMatch?.[1] ?? '';
-
-  // ── 최대구매 ──
-  const maxMatch = block.match(/최대구매\s*(\d+)/);
-  const maxPurchase = maxMatch ? `최대 ${maxMatch[1]}개` : '';
-
-  const isSoldOut = /품절/.test(block);
-  const isMemberOnly = /회원\s*전용/.test(block);
+  // 전체 이미지 목록 (product → results → thumbnail 순)
+  const sortOrder = ['product', 'results', 'thumbnail'];
+  const allImages = [...images]
+    .sort((a: any, b: any) => {
+      const ai = sortOrder.indexOf(a.format || '');
+      const bi = sortOrder.indexOf(b.format || '');
+      return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+    })
+    .map((i: any) => i.url?.startsWith('http') ? i.url : `https://www.costco.co.kr${i.url}`)
+    .filter(Boolean);
 
   return {
     id: code,
@@ -207,18 +160,15 @@ function parseProductBlock(
     discount,
     discountAmount,
     period,
-    url: `https://www.costco.co.kr${relUrl}`,
+    url: `https://www.costco.co.kr/p/${code}`,
     imageUrl,
-    unit,
-    maxPurchase,
+    unit: '',
+    maxPurchase: '',
     isSoldOut,
     isMemberOnly,
+    matchedKeyword: keyword,
+    rating,
+    reviewCount,
+    allImages,
   };
-}
-
-function decodeHtml(str: string): string {
-  return str
-    .replace(/&amp;/g, '&').replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'").replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>').replace(/&nbsp;/g, ' ').trim();
 }

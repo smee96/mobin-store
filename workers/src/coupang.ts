@@ -12,6 +12,9 @@ export interface CoupangProduct {
   keyword: string;
   sourceUrl: string;
   shippingFee?: number;
+  brandName?: string;
+  optionName?: string;
+  returnCenterCode?: string;
 }
 
 export interface CoupangRegisteredProduct {
@@ -56,42 +59,143 @@ async function generateCoupangSignature(
     .join('');
 }
 
-// ─── 쿠팡 API 인증 헤더 ───
-async function getCoupangHeaders(
+const PROXY_URL = 'https://proxy.mobin-inc.com';
+const PROXY_SECRET = 'mobin-proxy-2024-xK9mP3nQ';
+
+// ─── 프록시 서버를 통한 쿠팡 API 호출 ───
+async function callCoupangViaProxy(
   env: Env,
   method: string,
-  path: string
-): Promise<Record<string, string>> {
-  const datetime = new Date().toISOString()
-    .replace(/\.\d{3}Z$/, 'Z')
-    .replace(/[-:]/g, '')
-    .replace('T', 'T');
-
-  const signature = await generateCoupangSignature(
-    env.COUPANG_SECRET_KEY,
-    method,
-    path,
-    datetime
-  );
-
-  const authorization = `CEA algorithm=HmacSHA256, access-key=${env.COUPANG_ACCESS_KEY}, signed-date=${datetime}, signature=${signature}`;
-
-  return {
-    'Content-Type': 'application/json;charset=UTF-8',
-    'Authorization': authorization,
-  };
+  path: string,
+  body?: any
+): Promise<{ status: number; data: any }> {
+  const res = await fetch(`${PROXY_URL}/proxy/coupang`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-proxy-secret': PROXY_SECRET,
+    },
+    body: JSON.stringify({
+      path,
+      method,
+      body,
+      accessKey: env.COUPANG_ACCESS_KEY,
+      secretKey: env.COUPANG_SECRET_KEY,
+    }),
+  });
+  const data = await res.json();
+  return { status: res.status, data };
 }
 
-const COUPANG_BASE = 'https://api-gateway.coupang.com';
+// ─── 반품센터 코드 자동 조회 ───
+export async function fetchReturnCenterCode(env: Env): Promise<string> {
+  // 알려진 API 경로 순서대로 시도
+  const paths = [
+    `/v2/providers/seller_api/apis/api/v1/marketplace/vendor/${env.COUPANG_VENDOR_ID}/return-ship-place-list`,
+    `/v2/providers/openapi/apis/api/v3/vendors/${env.COUPANG_VENDOR_ID}/returnShipmentInfos`,
+    `/v2/providers/seller_api/apis/api/v1/marketplace/seller/${env.COUPANG_VENDOR_ID}/return-ship-places`,
+  ];
+  for (const p of paths) {
+    try {
+      const { status, data } = await callCoupangViaProxy(env, 'GET', p);
+      if (status === 200 && data.code === 'SUCCESS') {
+        const list = Array.isArray(data.data) ? data.data : (data.data?.content || []);
+        const first = list[0];
+        const code = first?.returnCenterCode || first?.shippingPlaceCode || first?.code || '';
+        if (code) { console.log('반품센터 코드 조회 성공:', code, 'from', p); return String(code); }
+      }
+    } catch {}
+  }
+  return '';
+}
+
+// ─── 카테고리 메타정보 조회 ───
+async function getCoupangCategoryMeta(env: Env, categoryId: number): Promise<{
+  noticeCategories: Array<{
+    noticeCategoryName: string;
+    details: Array<{ noticeCategoryDetailName: string }>;
+  }>;
+}> {
+  const path = `/v2/providers/seller_api/apis/api/v1/marketplace/meta/category-related-metas/display-category-codes/${categoryId}`;
+  try {
+    const { status, data } = await callCoupangViaProxy(env, 'GET', path);
+    if (status === 200 && data.code === 'SUCCESS') {
+      const rawCats = data.data?.noticeCategories || [];
+      console.log('noticeCategories raw:', JSON.stringify(rawCats).slice(0, 400));
+      const cats = rawCats.map((c: any) => {
+        // 가능한 세부 항목 필드명 전부 시도
+        const rawDetails: any[] =
+          c.noticeCategoryDetails || c.noticeDetails || c.details || c.noticeItems || [];
+        return {
+          noticeCategoryName: c.noticeCategoryName,
+          details: rawDetails
+            .map((d: any) => ({
+              noticeCategoryDetailName:
+                d.noticeCategoryDetailName || d.detailName || d.name || '',
+            }))
+            .filter((d: any) => d.noticeCategoryDetailName),
+        };
+      });
+      return { noticeCategories: cats };
+    }
+    console.error('getCoupangCategoryMeta failed:', status, JSON.stringify(data).slice(0, 200));
+  } catch (e) {
+    console.error('getCoupangCategoryMeta error:', e);
+  }
+  return { noticeCategories: [] };
+}
 
 // ─── 상품 등록 ───
 export async function registerCoupangProduct(
   env: Env,
   product: CoupangProduct
-): Promise<{ success: boolean; productId?: number; error?: string }> {
+): Promise<{ success: boolean; productId?: number; error?: string; _debug?: any }> {
   const path = `/v2/providers/seller_api/apis/api/v1/marketplace/seller-products`;
 
-  const shippingFee = product.shippingFee ?? 0;
+  // 반품센터: env 우선, 없으면 API 자동 조회
+  let returnCenterCode = product.returnCenterCode || env.COUPANG_RETURN_CENTER_CODE || '';
+  if (!returnCenterCode) {
+    returnCenterCode = await fetchReturnCenterCode(env);
+  }
+
+  // 카테고리 메타에서 고시 카테고리 조회
+  const meta = await getCoupangCategoryMeta(env, product.categoryId);
+
+  // 고시정보 구성
+  let notices: any[] = [];
+  for (const cat of meta.noticeCategories) {
+    for (const detail of cat.details) {
+      notices.push({
+        noticeCategoryName: cat.noticeCategoryName,
+        noticeCategoryDetailName: detail.noticeCategoryDetailName,
+        content: '상세페이지 참조',
+      });
+    }
+  }
+
+  // 고시정보가 없으면 식품 기본 항목으로 폴백
+  if (notices.length === 0) {
+    notices = [
+      { noticeCategoryName: '농수축산물', noticeCategoryDetailName: '품목 또는 명칭', content: '상세페이지 참조' },
+      { noticeCategoryName: '농수축산물', noticeCategoryDetailName: '포장단위별 용량(중량), 수량, 크기', content: '상세페이지 참조' },
+      { noticeCategoryName: '농수축산물', noticeCategoryDetailName: '생산자, 수입품의 경우 생산국', content: '상세페이지 참조' },
+      { noticeCategoryName: '농수축산물', noticeCategoryDetailName: '농수산물의 원산지', content: '상세페이지 참조' },
+      { noticeCategoryName: '농수축산물', noticeCategoryDetailName: '제조연월일(포장일 또는 생산연도), 유통기한 또는 품질유지기한', content: '상세페이지 참조' },
+      { noticeCategoryName: '농수축산물', noticeCategoryDetailName: '보관방법 또는 취급방법', content: '상세페이지 참조' },
+      { noticeCategoryName: '농수축산물', noticeCategoryDetailName: 'GM 여부(표시대상 농수산물에 한함)', content: '해당없음' },
+      { noticeCategoryName: '농수축산물', noticeCategoryDetailName: '방사선 조사여부', content: '해당없음' },
+      { noticeCategoryName: '농수축산물', noticeCategoryDetailName: '소비자상담관련 전화번호', content: '상세페이지 참조' },
+    ];
+    console.log('고시정보 API 미조회 → 식품 기본 폴백 사용');
+  }
+
+  console.log('등록 디버그:', JSON.stringify({
+    categoryId: product.categoryId,
+    returnCenterCode,
+    noticeCount: notices.length,
+    firstNotice: notices[0],
+    rawCategoryMeta: JSON.stringify(meta).slice(0, 300),
+  }));
 
   const payload = {
     displayCategoryCode: product.categoryId,
@@ -101,42 +205,49 @@ export async function registerCoupangProduct(
     saleEndedAt: '2099-12-31T00:00:00',
     vendorUserId: env.COUPANG_VENDOR_ID,
     productType: 1,
-    returnCenterCode: '',
-    outboundShippingTimeDay: 3,
+    returnCenterCode,
+    outboundShippingTimeDay: 2,
     unionDeliveryType: 'UNION_DELIVERY',
     deliveryMethod: 'PARCEL',
     deliveryCompanyCode: 'CJGLS',
-    deliveryChargeType: shippingFee === 0 ? 'FREE' : 'NOT_FREE',
-    deliveryCharge: shippingFee,
-    freeShipOverAmount: shippingFee === 0 ? 0 : 50000,
+    deliveryChargeType: 'FREE',
+    deliveryCharge: 0,
+    freeShipOverAmount: 0,
+    remoteAreaYn: 'N',
     returnCharge: 5000,
-    returnChargeName: '반품 배송비',
+    returnChargeWithPackage: 5000,
     pccNeeded: false,
+    brand: product.brandName || '',
+    manufacture: product.brandName || '',
     items: [
       {
-        itemName: product.vendorItemName,
+        itemName: product.optionName || product.vendorItemName,
+        taxType: 'TAX',
+        adultOnly: 'ADULT_NONE',
+        overseasPurchaseAgencyYn: 'N',
         originalPrice: product.originalPrice,
         salePrice: product.salePrice,
-        maximumBuyCount: 999,
-        maximumBuyForPerson: 999,
+        maximumBuyCount: 0,
+        maximumBuyForPerson: 0,
         unitCount: 1,
-        stockQuantity: product.stockQuantity || 999,
-        outboundShippingTimeDay: 3,
+        stockQuantity: product.stockQuantity || 99,
+        outboundShippingTimeDay: 2,
+        remoteAreaYn: 'N',
         images: product.images.filter(Boolean).slice(0, 10).map((url, i) => ({
           imageType: i === 0 ? 'REPRESENTATION' : 'DETAIL',
           cdnPath: url,
           vendorPath: url,
         })),
-        notices: [],
+        notices,
         attributes: [],
         contents: [{
-          contentsType: 'TEXT',
+          contentsType: 'HTML',
           contentDetails: [{
             content: product.description,
             detailType: 'TEXT',
           }],
         }],
-        searchTags: [product.keyword],
+        searchTags: [product.keyword].filter(Boolean),
         certifications: [],
       }
     ],
@@ -144,31 +255,22 @@ export async function registerCoupangProduct(
   };
 
   try {
-    const headers = await getCoupangHeaders(env, 'POST', path);
+    const { status, data } = await callCoupangViaProxy(env, 'POST', path, payload);
+    console.log('쿠팡 API 응답 status:', status, JSON.stringify(data).slice(0, 500));
 
-    const response = await fetch(`${COUPANG_BASE}${path}`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(payload),
-    });
-
-    const responseText = await response.text();
-    console.log('쿠팡 API 응답 status:', response.status);
-    console.log('쿠팡 API 응답 텍스트:', responseText.slice(0, 500));
-
-    let data: any;
-    try {
-      data = JSON.parse(responseText);
-    } catch {
-      return { success: false, error: `쿠팡 API 응답 오류 (${response.status}): ${responseText.slice(0, 200)}` };
-    }
-
-    if (response.ok && data.code === 'SUCCESS') {
+    if (status === 200 && data.code === 'SUCCESS') {
       return { success: true, productId: data.data?.productId };
     } else {
       return {
         success: false,
-        error: data.message || data.code || `HTTP ${response.status}`,
+        error: data.message || data.code || `HTTP ${status}`,
+        _debug: {
+          categoryId: product.categoryId,
+          returnCenterCode,
+          noticeCount: notices.length,
+          firstNotice: notices[0],
+          rawMeta: JSON.stringify(meta).slice(0, 500),
+        },
       };
     }
   } catch (e: any) {
@@ -184,10 +286,8 @@ export async function getCoupangProduct(
 ): Promise<CoupangRegisteredProduct | null> {
   const path = `/v2/providers/seller_api/apis/api/v1/marketplace/seller-products/${productId}`;
   try {
-    const headers = await getCoupangHeaders(env, 'GET', path);
-    const response = await fetch(`${COUPANG_BASE}${path}`, { method: 'GET', headers });
-    const data = await response.json() as any;
-    if (!response.ok || data.code !== 'SUCCESS') return null;
+    const { status, data } = await callCoupangViaProxy(env, 'GET', path);
+    if (status !== 200 || data.code !== 'SUCCESS') return null;
     const item = data.data?.items?.[0];
     return {
       productId: data.data.productId,
@@ -200,8 +300,8 @@ export async function getCoupangProduct(
   } catch { return null; }
 }
 
-// ─── 1688/알리 상품 → 쿠팡 상품 변환 ───
-export function convertToCoupangProduct(
+// ─── 코스트코 상품 → 쿠팡 상품 변환 (카테고리 API 우선 조회) ───
+export async function convertToCoupangProduct(
   env: Env,
   source: {
     title: string;
@@ -209,44 +309,155 @@ export function convertToCoupangProduct(
     suggested_sell_price: number;
     image_url: string;
     detail_url: string;
+    all_images?: string[];
+    costco_price?: number;
     shipping_fee?: number;
-    margin_rate?: number;
+    return_center_code?: string;
   }
-): CoupangProduct {
+): Promise<CoupangProduct> {
   const salePrice = source.suggested_sell_price;
-  const originalPrice = Math.round(salePrice * 1.2);
+  const originalPrice = Math.round(salePrice * 1.15);
+
+  const brandName = source.title.split(' ')[0] || source.title;
+
+  const optionMatch = source.title.match(
+    /([\d.]+(?:ml|mL|L|g|kg|매|입|개|롤|정|장|팩|호|m)(?:\s*x\s*[\d]+)*)/i
+  );
+  const optionName = optionMatch ? optionMatch[0] : '1개';
+
+  const allImages = (source.all_images || [source.image_url]).filter(Boolean);
+  const fullImages = allImages.map(url =>
+    url.startsWith('http') ? url : `https://www.costco.co.kr${url}`
+  );
+
+  const detailImgHtml = fullImages.map(url =>
+    `<img src="${url}" style="width:100%;max-width:800px;display:block;margin:0 auto" />`
+  ).join('\n');
+
+  const description = `
+<div style="text-align:center;font-family:sans-serif">
+  <h2 style="font-size:18px;margin:20px 0">${source.title}</h2>
+  ${detailImgHtml}
+  <div style="margin:20px;padding:16px;background:#f8f8f8;border-radius:8px;text-align:left;font-size:14px">
+    <p>✅ 코스트코 정품 상품</p>
+    <p>✅ 빠른 출고 (주문 후 2일 이내)</p>
+    <p>✅ 안전한 포장</p>
+  </div>
+</div>`.trim();
+
+  // 카테고리: Coupang API 조회 → 폴백 맵 순서로 결정
+  const searchKw = source.keyword || source.title;
+  let categoryId = guessCategoryId(searchKw);
+  try {
+    const categories = await getCoupangDisplayCategories(env);
+    const found = findBestCategoryCode(categories, searchKw);
+    if (found) categoryId = found;
+  } catch (e) {
+    console.warn('카테고리 API 조회 실패, 폴백 사용:', e);
+  }
 
   return {
     vendorId: env.COUPANG_VENDOR_ID,
     vendorItemName: source.title,
     originalPrice,
     salePrice,
-    stockQuantity: 999,
-    images: [source.image_url].filter(Boolean),
-    description: `${source.title}\n\n✅ 빠른 배송\n✅ 품질 보장\n✅ 고객 만족 A/S\n\n원산지: 중국\n배송: 해외직구 (7-20일 소요)`,
-    categoryId: guessCategoryId(source.keyword),
+    stockQuantity: 99,
+    images: fullImages,
+    description,
+    categoryId,
     keyword: source.keyword,
     sourceUrl: source.detail_url,
-    shippingFee: source.shipping_fee ?? 0,
+    shippingFee: 0,
+    brandName,
+    optionName,
+    returnCenterCode: source.return_center_code || env.COUPANG_RETURN_CENTER_CODE || '',
   };
 }
 
-// ─── 카테고리 ID 추정 ───
+// ─── 쿠팡 유효 카테고리 목록 조회 ───
+export async function getCoupangDisplayCategories(
+  env: Env
+): Promise<Array<{ code: number; name: string; fullName: string }>> {
+  const CACHE_KEY = 'coupang:categories:v1';
+  const cached = await env.CACHE.get(CACHE_KEY);
+  if (cached) return JSON.parse(cached);
+
+  const path = `/v2/providers/seller_api/apis/api/v1/marketplace/meta/display-categories`;
+  try {
+    const { status, data } = await callCoupangViaProxy(env, 'GET', path);
+    if (status === 200 && data.code === 'SUCCESS') {
+      const result: Array<{ code: number; name: string; fullName: string }> = [];
+      function flatten(nodes: any[], parentName = '') {
+        for (const n of nodes || []) {
+          const code = Number(n.displayItemCategoryCode ?? n.displayCategoryCode);
+          const name: string = n.name || n.displayCategoryName || '';
+          const fullName = parentName ? `${parentName} > ${name}` : name;
+          if (n.child?.length) {
+            flatten(n.child, fullName);
+          } else if (code) {
+            result.push({ code, name, fullName });
+          }
+        }
+      }
+      flatten(Array.isArray(data.data) ? data.data : [data.data]);
+      // 24시간 캐시 (카테고리는 자주 바뀌지 않음)
+      await env.CACHE.put(CACHE_KEY, JSON.stringify(result), { expirationTtl: 86400 });
+      return result;
+    }
+    console.error('getCoupangDisplayCategories failed:', JSON.stringify(data).slice(0, 300));
+  } catch (e) {
+    console.error('getCoupangDisplayCategories error:', e);
+  }
+  return [];
+}
+
+// API에서 가져온 카테고리 목록에서 키워드로 최적 매칭
+function findBestCategoryCode(
+  categories: Array<{ code: number; name: string; fullName: string }>,
+  keyword: string
+): number | null {
+  if (!categories.length) return null;
+  const kw = keyword.toLowerCase();
+  // 1순위: fullName 완전 포함
+  for (const c of categories) {
+    if (c.fullName.toLowerCase().includes(kw)) return c.code;
+  }
+  // 2순위: name 포함
+  for (const c of categories) {
+    if (c.name.toLowerCase().includes(kw)) return c.code;
+  }
+  // 3순위: 키워드 토큰 하나라도 매칭
+  const tokens = kw.split(/\s+/).filter(t => t.length >= 2);
+  for (const token of tokens) {
+    for (const c of categories) {
+      if (c.fullName.toLowerCase().includes(token) || c.name.toLowerCase().includes(token)) {
+        return c.code;
+      }
+    }
+  }
+  return null;
+}
+
+// ─── 카테고리 ID 추정 (API 조회 실패 시 폴백) ───
+// 아래 코드는 /api/coupang/categories 엔드포인트로 실제 검증된 값
+const CATEGORY_FALLBACK_MAP: Record<string, number> = {
+  // 식품 (ROOT > 식품)
+  '식품': 59411, '견과': 59411, '과자': 59411, '라면': 58647,
+  '음료': 59411, '커피': 59411, '올리브유': 59411, '참기름': 59411,
+  // 생활용품/뷰티
+  '샴푸': 56240, '화장품': 56240, '스킨': 56240, '마스크팩': 56240,
+  '바디': 56240, '세제': 64470, '세탁': 64470,
+  // 가전 (ROOT > 가전/디지털)
+  '청소기': 63450, '로봇청소기': 63450,
+  // 패션 (ROOT > 패션의류잡화)
+  '패션': 69182, '의류': 69182, '옷': 69182,
+};
+
 export function guessCategoryId(keyword: string): number {
   const kw = keyword.toLowerCase();
-  const map: Record<string, number> = {
-    '패션': 15760014, '옷': 15760014, '의류': 15760014,
-    '화장품': 15760004, '스킨': 15760004, '마스크팩': 15760004, '세럼': 15760004,
-    '운동': 15760029, '헬스': 15760029, '스포츠': 15760029, '요가': 15760029,
-    '반려동물': 15760044, '강아지': 15760044, '고양이': 15760044,
-    '주방': 15760001, '조리': 15760001,
-    '식품': 15760027, '건강식품': 15760026, '비타민': 15760026,
-    '육아': 15760010, '아기': 15760010, '유아': 15760010,
-    '족욕': 15760001, '안마': 15760001, '마사지': 15760001,
-    '청소': 15760001, '생활': 15760001,
-  };
-  for (const [key, id] of Object.entries(map)) {
-    if (kw.includes(key)) return id;
+  for (const [key, id] of Object.entries(CATEGORY_FALLBACK_MAP)) {
+    if (kw.includes(key.toLowerCase())) return id;
   }
-  return 15760001;
+  // 59411: 식품 > 견과류 (코스트코 상품 대다수가 식품류)
+  return 59411;
 }

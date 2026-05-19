@@ -12,6 +12,7 @@ export interface Env {
   COUPANG_ACCESS_KEY: string;
   COUPANG_SECRET_KEY: string;
   COUPANG_VENDOR_ID: string;
+  COUPANG_RETURN_CENTER_CODE: string;
   SMART_STORE_URL: string;
   MIN_ROAS: string;
   DAILY_BUDGET_PER_AD: string;
