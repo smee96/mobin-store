@@ -898,10 +898,27 @@ async function submitCoupangRegister() {
     closeCoupangModal();
     alert('✅ 쿠팡 등록 완료!\n' + (result.coupangUrl || ''));
   } else {
-    let msg = '등록 실패: ' + (result?.error || '알 수 없는 오류');
-    if (result?._debug) msg += '\n\n[Debug]\n' + JSON.stringify(result._debug, null, 2);
-    alert(msg);
+    console.error('쿠팡 등록 실패 전체 응답:', JSON.stringify(result, null, 2));
+    const errText = result?.error || '알 수 없는 오류';
+    const debugText = result?._debug ? '\n\n[Debug]\n' + JSON.stringify(result._debug, null, 2) : '';
+    showCoupangError(errText + debugText);
   }
+}
+
+function showCoupangError(msg) {
+  const existing = document.getElementById('coupang-error-modal');
+  if (existing) existing.remove();
+  const overlay = document.createElement('div');
+  overlay.id = 'coupang-error-modal';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:200';
+  overlay.innerHTML = `
+    <div style="background:#fff;border-radius:12px;padding:24px;width:560px;max-width:90vw;max-height:80vh;display:flex;flex-direction:column;gap:12px">
+      <div style="font-weight:600;font-size:15px;color:#e03030">등록 실패</div>
+      <textarea readonly style="flex:1;min-height:200px;padding:12px;border:1px solid #ddd;border-radius:8px;font-size:12px;font-family:monospace;resize:vertical;color:#333">${msg.replace(/</g,'&lt;')}</textarea>
+      <div style="font-size:11px;color:#888">위 텍스트를 선택해서 복사할 수 있습니다. DevTools Console에도 전체 응답이 출력됩니다.</div>
+      <button onclick="document.getElementById('coupang-error-modal').remove()" style="padding:8px 20px;background:#6c47e8;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:13px">닫기</button>
+    </div>`;
+  document.body.appendChild(overlay);
 }
 
 async function runJob(jobName) {
