@@ -167,33 +167,21 @@ export async function registerCoupangProduct(
   // 카테고리 메타에서 고시 카테고리 조회
   const meta = await getCoupangCategoryMeta(env, product.categoryId);
 
-  // 고시정보 구성: noticeCategoryName 당 1개만 허용 (중복 시 오류)
+  // 고시정보 구성: noticeCategoryName 당 1개만 허용
   let notices: any[] = [];
 
-  // 1순위: meta API에서 카테고리 목록 가져와 각 카테고리당 1개씩
-  if (meta.noticeCategories.length > 0) {
+  if (product.noticeCategory) {
+    // 사용자가 모달에서 직접 지정한 경우 → 해당 카테고리만 사용
+    notices = [{ noticeCategoryName: product.noticeCategory, noticeCategoryDetailName: '품목 또는 명칭', content: '상세페이지 참조' }];
+  } else if (meta.noticeCategories.length > 0) {
+    // meta API 카테고리 목록으로 각 카테고리당 1개
     notices = meta.noticeCategories.map(cat => ({
       noticeCategoryName: cat.noticeCategoryName,
       noticeCategoryDetailName: '품목 또는 명칭',
       content: '상세페이지 참조',
     }));
-  }
-
-  // 2순위: 사용자가 모달에서 직접 카테고리 지정
-  if (product.noticeCategory) {
-    const found = notices.find(n => n.noticeCategoryName === product.noticeCategory);
-    if (!found) {
-      notices.unshift({
-        noticeCategoryName: product.noticeCategory,
-        noticeCategoryDetailName: '품목 또는 명칭',
-        content: '상세페이지 참조',
-      });
-    }
-  }
-
-  // 3순위: 아무것도 없으면 가공식품 기본값
-  if (notices.length === 0) {
-    notices = [{ noticeCategoryName: '가공식품', noticeCategoryDetailName: '품목 또는 명칭', content: '상세페이지 참조' }];
+  } else {
+    notices = [{ noticeCategoryName: '기타 재화', noticeCategoryDetailName: '품목 또는 명칭', content: '상세페이지 참조' }];
   }
 
   console.log('등록 디버그:', JSON.stringify({
@@ -230,17 +218,13 @@ export async function registerCoupangProduct(
       {
         itemName: product.optionName || product.vendorItemName,
         taxType: 'TAX',
-        adultOnly: product.adultOnlyYn || 'N',
-        overseasPurchaseAgencyYn: product.overseasYn || 'N',
         originalPrice: product.originalPrice,
         salePrice: product.salePrice,
-        maximumBuyCount: product.buyCount ?? 999,
-        maximumBuyCountPeriod: product.buyCountPeriod || 'DAY',
+        maximumBuyCount: 0,
         maximumBuyForPerson: 0,
         unitCount: 1,
         stockQuantity: product.stockQuantity || 99,
         outboundShippingTimeDay: 2,
-        remoteAreaYn: 'N',
         images: product.images.filter(Boolean).slice(0, 10).map((url, i) => ({
           imageType: i === 0 ? 'REPRESENTATION' : 'DETAIL',
           cdnPath: url,
@@ -326,6 +310,7 @@ export async function convertToCoupangProduct(
     overseas_yn?: string;
     buy_count_period?: string;
     buy_count?: number;
+    category_code?: number;
   }
 ): Promise<CoupangProduct> {
   const salePrice = source.suggested_sell_price;
@@ -358,15 +343,21 @@ export async function convertToCoupangProduct(
   </div>
 </div>`.trim();
 
-  // 카테고리: Coupang API 조회 → 폴백 맵 순서로 결정
-  const searchKw = source.keyword || source.title;
-  let categoryId = guessCategoryId(searchKw);
-  try {
-    const categories = await getCoupangDisplayCategories(env);
-    const found = findBestCategoryCode(categories, searchKw);
-    if (found) categoryId = found;
-  } catch (e) {
-    console.warn('카테고리 API 조회 실패, 폴백 사용:', e);
+  // 카테고리: 사용자 지정 → Coupang API 조회 → 폴백 맵 순서로 결정
+  let categoryId: number;
+  if (source.category_code) {
+    categoryId = source.category_code;
+    console.log('카테고리 사용자 지정:', categoryId);
+  } else {
+    const searchKw = source.keyword || source.title;
+    categoryId = guessCategoryId(searchKw);
+    try {
+      const categories = await getCoupangDisplayCategories(env);
+      const found = findBestCategoryCode(categories, searchKw);
+      if (found) categoryId = found;
+    } catch (e) {
+      console.warn('카테고리 API 조회 실패, 폴백 사용:', e);
+    }
   }
 
   return {

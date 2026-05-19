@@ -64,7 +64,7 @@ export default {
         const {
           title, keyword, suggested_sell_price, image_url, all_images, detail_url, costco_price,
           id: productDbId,
-          notice_category, adult_only, overseas_yn, buy_count_period, buy_count, return_center_code,
+          notice_category, adult_only, overseas_yn, buy_count_period, buy_count, return_center_code, category_code,
         } = body;
         if (!title) return json({ error: 'title 필수' }, 400);
 
@@ -82,6 +82,7 @@ export default {
           overseas_yn,
           buy_count_period,
           buy_count,
+          category_code: category_code ? Number(category_code) : undefined,
         });
 
         const result = await registerCoupangProduct(env, coupangProduct);

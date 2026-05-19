@@ -891,12 +891,9 @@ async function submitCoupangRegister() {
       image_url: crmProduct?.imageUrl || '',
       all_images: crmProduct?.allImages || (crmProduct?.imageUrl ? [crmProduct.imageUrl] : []),
       detail_url: crmProduct?.url || '',
-      notice_category: document.getElementById('crm-notice-cat').value,
-      adult_only: document.getElementById('crm-adult').value,
-      overseas_yn: document.getElementById('crm-overseas').value,
-      buy_count_period: document.getElementById('crm-buy-period').value,
-      buy_count: 999,
+      notice_category: document.getElementById('crm-notice-cat').value || undefined,
       return_center_code: document.getElementById('crm-return-code').value.trim() || undefined,
+      category_code: document.getElementById('crm-category-code').value ? Number(document.getElementById('crm-category-code').value) : undefined,
     }),
   });
   btn.disabled = false; btn.textContent = '✅ 쿠팡 등록하기';
@@ -909,6 +906,36 @@ async function submitCoupangRegister() {
     const debugText = result?._debug ? '\n\n[Debug]\n' + JSON.stringify(result._debug, null, 2) : '';
     showCoupangError(errText + debugText);
   }
+}
+
+async function searchCoupangCat() {
+  const kw = document.getElementById('crm-cat-search').value.trim();
+  if (!kw) return;
+  const el = document.getElementById('crm-cat-results');
+  el.style.display = 'block';
+  el.innerHTML = '<div style="padding:10px;color:var(--muted)">검색 중...</div>';
+  const data = await api('/api/coupang/categories?keyword=' + encodeURIComponent(kw));
+  if (!data || !data.results?.length) {
+    el.innerHTML = '<div style="padding:10px;color:var(--muted)">결과 없음</div>';
+    return;
+  }
+  el.innerHTML = data.results.slice(0, 30).map(c =>
+    `<div onclick="selectCoupangCat(${c.code},\`${c.fullName.replace(/`/g,"'")}\`)"
+      style="padding:8px 12px;cursor:pointer;border-bottom:1px solid rgba(180,160,130,0.2)"
+      onmouseover="this.style.background='rgba(108,71,232,0.07)'"
+      onmouseout="this.style.background=''">
+      <span style="color:var(--muted);font-family:var(--mono);font-size:10px">${c.code}</span>
+      <span style="margin-left:6px">${escHtml(c.fullName)}</span>
+    </div>`
+  ).join('');
+}
+
+function selectCoupangCat(code, name) {
+  document.getElementById('crm-category-name').value = name;
+  document.getElementById('crm-category-code').value = code;
+  document.getElementById('crm-cat-code-badge').textContent = 'ID: ' + code;
+  document.getElementById('crm-cat-code-badge').style.display = 'inline';
+  document.getElementById('crm-cat-results').style.display = 'none';
 }
 
 function showCoupangError(msg) {
@@ -1014,8 +1041,17 @@ function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;'
         <input id="crm-title" class="form-input" style="width:100%;box-sizing:border-box">
       </div>
       <div>
-        <div style="font-size:12px;font-weight:700;margin-bottom:6px">③ 카테고리 (자동 추천)</div>
-        <input id="crm-category-name" class="form-input" style="width:100%;box-sizing:border-box" readonly>
+        <div style="font-size:12px;font-weight:700;margin-bottom:6px">③ 카테고리 <span style="font-size:10px;color:var(--muted);font-weight:400">(자동 추천 — 잘못된 경우 검색해서 변경)</span></div>
+        <div style="display:flex;gap:6px;margin-bottom:6px">
+          <input id="crm-cat-search" class="form-input" style="flex:1;box-sizing:border-box" placeholder="카테고리 검색 (예: 견과류, 음료, 화장품...)">
+          <button onclick="searchCoupangCat()" class="btn btn-outline btn-sm" style="white-space:nowrap;padding:0 14px">검색</button>
+        </div>
+        <div id="crm-cat-results" style="display:none;max-height:140px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:var(--card);margin-bottom:6px;font-size:12px"></div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input id="crm-category-name" class="form-input" style="flex:1;box-sizing:border-box" readonly placeholder="자동 추천됩니다">
+          <span id="crm-cat-code-badge" style="font-family:var(--mono);font-size:10px;color:var(--muted);white-space:nowrap;display:none"></span>
+        </div>
+        <input id="crm-category-code" type="hidden">
       </div>
       <div>
         <div style="font-size:12px;font-weight:700;margin-bottom:6px">④ 옵션명 (중량/수량)</div>
@@ -1060,37 +1096,16 @@ function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;'
       <div>
         <div style="font-size:12px;font-weight:700;margin-bottom:8px">⑨ 쿠팡 API 세부 설정 <span style="font-size:10px;color:var(--muted);font-weight:400">(오류 시 직접 조정)</span></div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-          <div>
-            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">고시정보 카테고리 <span style="color:var(--danger)">*</span></label>
+          <div style="grid-column:1/-1">
+            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">고시정보 카테고리 <span style="font-size:10px">(비워두면 쿠팡 API 자동 결정)</span></label>
             <select id="crm-notice-cat" class="form-input" style="width:100%;box-sizing:border-box">
+              <option value="">자동 (API 기반)</option>
               <option value="가공식품">가공식품 (포장·가공식품)</option>
               <option value="농수축산물">농수축산물 (신선식품)</option>
               <option value="건강기능식품">건강기능식품 (비타민·영양제)</option>
               <option value="생활화학제품">생활화학제품 (세제·청소용품)</option>
               <option value="공산품">공산품 (전자·생활잡화)</option>
               <option value="기타 재화">기타 재화</option>
-            </select>
-          </div>
-          <div>
-            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">해외구매대행 여부</label>
-            <select id="crm-overseas" class="form-input" style="width:100%;box-sizing:border-box">
-              <option value="N">국내 상품 (N)</option>
-              <option value="Y">해외구매대행 (Y)</option>
-            </select>
-          </div>
-          <div>
-            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">성인 전용 여부</label>
-            <select id="crm-adult" class="form-input" style="width:100%;box-sizing:border-box">
-              <option value="N">전체 이용가 (N)</option>
-              <option value="Y">성인 전용 (Y)</option>
-            </select>
-          </div>
-          <div>
-            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">구매수량 제한 기간</label>
-            <select id="crm-buy-period" class="form-input" style="width:100%;box-sizing:border-box">
-              <option value="DAY">일별 제한 (DAY)</option>
-              <option value="MONTH">월별 제한 (MONTH)</option>
-              <option value="ONCE">1회 구매한정 (ONCE)</option>
             </select>
           </div>
         </div>
