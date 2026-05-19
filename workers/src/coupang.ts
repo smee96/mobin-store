@@ -15,6 +15,12 @@ export interface CoupangProduct {
   brandName?: string;
   optionName?: string;
   returnCenterCode?: string;
+  // 사용자가 모달에서 직접 지정하는 필드
+  noticeCategory?: string;   // 고시정보 카테고리 (가공식품, 농수축산물 등)
+  adultOnlyYn?: string;      // 성인여부 (N/Y)
+  overseasYn?: string;       // 해외구매대행여부 (N/Y)
+  buyCountPeriod?: string;   // 최대구매수량 기간 (DAY/MONTH/ONCE)
+  buyCount?: number;         // 최대구매수량
 }
 
 export interface CoupangRegisteredProduct {
@@ -161,32 +167,33 @@ export async function registerCoupangProduct(
   // 카테고리 메타에서 고시 카테고리 조회
   const meta = await getCoupangCategoryMeta(env, product.categoryId);
 
-  // 고시정보 구성
+  // 고시정보 구성: noticeCategoryName 당 1개만 허용 (중복 시 오류)
   let notices: any[] = [];
-  for (const cat of meta.noticeCategories) {
-    for (const detail of cat.details) {
-      notices.push({
-        noticeCategoryName: cat.noticeCategoryName,
-        noticeCategoryDetailName: detail.noticeCategoryDetailName,
+
+  // 1순위: meta API에서 카테고리 목록 가져와 각 카테고리당 1개씩
+  if (meta.noticeCategories.length > 0) {
+    notices = meta.noticeCategories.map(cat => ({
+      noticeCategoryName: cat.noticeCategoryName,
+      noticeCategoryDetailName: '품목 또는 명칭',
+      content: '상세페이지 참조',
+    }));
+  }
+
+  // 2순위: 사용자가 모달에서 직접 카테고리 지정
+  if (product.noticeCategory) {
+    const found = notices.find(n => n.noticeCategoryName === product.noticeCategory);
+    if (!found) {
+      notices.unshift({
+        noticeCategoryName: product.noticeCategory,
+        noticeCategoryDetailName: '품목 또는 명칭',
         content: '상세페이지 참조',
       });
     }
   }
 
-  // 고시정보가 없으면 식품 기본 항목으로 폴백
+  // 3순위: 아무것도 없으면 가공식품 기본값
   if (notices.length === 0) {
-    notices = [
-      { noticeCategoryName: '농수축산물', noticeCategoryDetailName: '품목 또는 명칭', content: '상세페이지 참조' },
-      { noticeCategoryName: '농수축산물', noticeCategoryDetailName: '포장단위별 용량(중량), 수량, 크기', content: '상세페이지 참조' },
-      { noticeCategoryName: '농수축산물', noticeCategoryDetailName: '생산자, 수입품의 경우 생산국', content: '상세페이지 참조' },
-      { noticeCategoryName: '농수축산물', noticeCategoryDetailName: '농수산물의 원산지', content: '상세페이지 참조' },
-      { noticeCategoryName: '농수축산물', noticeCategoryDetailName: '제조연월일(포장일 또는 생산연도), 유통기한 또는 품질유지기한', content: '상세페이지 참조' },
-      { noticeCategoryName: '농수축산물', noticeCategoryDetailName: '보관방법 또는 취급방법', content: '상세페이지 참조' },
-      { noticeCategoryName: '농수축산물', noticeCategoryDetailName: 'GM 여부(표시대상 농수산물에 한함)', content: '해당없음' },
-      { noticeCategoryName: '농수축산물', noticeCategoryDetailName: '방사선 조사여부', content: '해당없음' },
-      { noticeCategoryName: '농수축산물', noticeCategoryDetailName: '소비자상담관련 전화번호', content: '상세페이지 참조' },
-    ];
-    console.log('고시정보 API 미조회 → 식품 기본 폴백 사용');
+    notices = [{ noticeCategoryName: '가공식품', noticeCategoryDetailName: '품목 또는 명칭', content: '상세페이지 참조' }];
   }
 
   console.log('등록 디버그:', JSON.stringify({
@@ -223,11 +230,12 @@ export async function registerCoupangProduct(
       {
         itemName: product.optionName || product.vendorItemName,
         taxType: 'TAX',
-        adultOnly: 'ADULT_NONE',
-        overseasPurchaseAgencyYn: 'N',
+        adultOnly: product.adultOnlyYn || 'N',
+        overseasPurchaseAgencyYn: product.overseasYn || 'N',
         originalPrice: product.originalPrice,
         salePrice: product.salePrice,
-        maximumBuyCount: 0,
+        maximumBuyCount: product.buyCount ?? 999,
+        maximumBuyCountPeriod: product.buyCountPeriod || 'DAY',
         maximumBuyForPerson: 0,
         unitCount: 1,
         stockQuantity: product.stockQuantity || 99,
@@ -313,6 +321,11 @@ export async function convertToCoupangProduct(
     costco_price?: number;
     shipping_fee?: number;
     return_center_code?: string;
+    notice_category?: string;
+    adult_only?: string;
+    overseas_yn?: string;
+    buy_count_period?: string;
+    buy_count?: number;
   }
 ): Promise<CoupangProduct> {
   const salePrice = source.suggested_sell_price;
@@ -371,6 +384,11 @@ export async function convertToCoupangProduct(
     brandName,
     optionName,
     returnCenterCode: source.return_center_code || env.COUPANG_RETURN_CENTER_CODE || '',
+    noticeCategory: source.notice_category,
+    adultOnlyYn: source.adult_only || 'N',
+    overseasYn: source.overseas_yn || 'N',
+    buyCountPeriod: source.buy_count_period || 'DAY',
+    buyCount: source.buy_count ?? 999,
   };
 }
 

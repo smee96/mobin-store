@@ -61,7 +61,11 @@ export default {
 
       if (path === '/api/coupang/register' && request.method === 'POST') {
         const body = await request.json() as any;
-        const { title, keyword, suggested_sell_price, image_url, all_images, detail_url, costco_price, id: productDbId } = body;
+        const {
+          title, keyword, suggested_sell_price, image_url, all_images, detail_url, costco_price,
+          id: productDbId,
+          notice_category, adult_only, overseas_yn, buy_count_period, buy_count, return_center_code,
+        } = body;
         if (!title) return json({ error: 'title 필수' }, 400);
 
         const coupangProduct = await convertToCoupangProduct(env, {
@@ -72,7 +76,12 @@ export default {
           all_images: all_images || (image_url ? [image_url] : []),
           detail_url: detail_url || '',
           costco_price: costco_price || 0,
-          return_center_code: (env as any).COUPANG_RETURN_CENTER_CODE || '',
+          return_center_code: return_center_code || env.COUPANG_RETURN_CENTER_CODE || '',
+          notice_category,
+          adult_only,
+          overseas_yn,
+          buy_count_period,
+          buy_count,
         });
 
         const result = await registerCoupangProduct(env, coupangProduct);
