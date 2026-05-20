@@ -892,6 +892,10 @@ async function submitCoupangRegister() {
       all_images: crmProduct?.allImages || (crmProduct?.imageUrl ? [crmProduct.imageUrl] : []),
       detail_url: crmProduct?.url || '',
       notice_category: document.getElementById('crm-notice-cat').value || undefined,
+      adult_only: document.getElementById('crm-adult-only').value || 'N',
+      overseas_yn: document.getElementById('crm-overseas-yn').value || 'N',
+      buy_count_period: document.getElementById('crm-buy-period').value || 'MONTH',
+      buy_count: parseInt(document.getElementById('crm-buy-count').value) || 999,
       return_center_code: document.getElementById('crm-return-code').value.trim() || undefined,
       category_code: document.getElementById('crm-category-code').value ? Number(document.getElementById('crm-category-code').value) : undefined,
     }),
@@ -1104,14 +1108,40 @@ function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;'
               <option value="농수축산물">농수축산물 (신선식품)</option>
               <option value="건강기능식품">건강기능식품 (비타민·영양제)</option>
               <option value="생활화학제품">생활화학제품 (세제·청소용품)</option>
-              <option value="공산품">공산품 (전자·생활잡화)</option>
               <option value="기타 재화">기타 재화</option>
             </select>
           </div>
+          <div>
+            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">성인여부</label>
+            <select id="crm-adult-only" class="form-input" style="width:100%;box-sizing:border-box">
+              <option value="N">N — 일반상품</option>
+              <option value="Y">Y — 성인상품</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">해외구매대행</label>
+            <select id="crm-overseas-yn" class="form-input" style="width:100%;box-sizing:border-box">
+              <option value="N">N — 국내상품</option>
+              <option value="Y">Y — 해외구매대행</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">최대구매수량기간</label>
+            <select id="crm-buy-period" class="form-input" style="width:100%;box-sizing:border-box">
+              <option value="MONTH">MONTH (월)</option>
+              <option value="DAY">DAY (일)</option>
+              <option value="ONCE">ONCE (1회)</option>
+              <option value="UNLIMIT">UNLIMIT (무제한)</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">최대구매수량</label>
+            <input id="crm-buy-count" class="form-input" type="number" value="999" min="1" style="width:100%;box-sizing:border-box">
+          </div>
         </div>
         <div style="margin-top:10px">
-          <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">반품센터 코드 <span style="color:var(--muted)">(비워두면 환경변수 사용)</span></label>
-          <input id="crm-return-code" class="form-input" placeholder="예: 1002612213  ← wing.coupang.com에서 확인" style="width:100%;box-sizing:border-box">
+          <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">반품센터 코드 <span style="color:var(--danger);font-weight:700">*필수</span> <span style="color:var(--muted)">(wing.coupang.com → 판매자 정보 → 반품/출고지 에서 확인)</span></label>
+          <input id="crm-return-code" class="form-input" placeholder="예: 1002612213  ← wing에서 확인 필요" style="width:100%;box-sizing:border-box">
         </div>
       </div>
     </div>

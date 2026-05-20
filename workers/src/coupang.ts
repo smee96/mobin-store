@@ -151,6 +151,29 @@ async function getCoupangCategoryMeta(env: Env, categoryId: number): Promise<{
   return { noticeCategories: [] };
 }
 
+// 고시정보 카테고리별 첫번째 세부항목명 매핑
+const NOTICE_DETAIL_MAP: Record<string, string> = {
+  '농수축산물': '품목 또는 명칭',
+  '가공식품': '제품명',
+  '건강기능식품': '제품명',
+  '생활화학제품': '품명',
+  '공산품': '품명 및 모델명',
+  '기타 재화': '품명 및 모델명',
+  '의류': '제품 소재',
+  '섬유·의류': '제품 소재',
+  '신발': '소재',
+  '가방': '소재',
+  '쥬얼리': '소재',
+};
+
+function getNoticeDetailName(
+  catName: string,
+  details: Array<{ noticeCategoryDetailName: string }>
+): string {
+  if (details.length > 0) return details[0].noticeCategoryDetailName;
+  return NOTICE_DETAIL_MAP[catName] ?? '품명 및 모델명';
+}
+
 // ─── 상품 등록 ───
 export async function registerCoupangProduct(
   env: Env,
@@ -158,30 +181,32 @@ export async function registerCoupangProduct(
 ): Promise<{ success: boolean; productId?: number; error?: string; _debug?: any }> {
   const path = `/v2/providers/seller_api/apis/api/v1/marketplace/seller-products`;
 
-  // 반품센터: env 우선, 없으면 API 자동 조회
-  let returnCenterCode = product.returnCenterCode || env.COUPANG_RETURN_CENTER_CODE || '';
-  if (!returnCenterCode) {
-    returnCenterCode = await fetchReturnCenterCode(env);
-  }
+  // 반품센터: product → env 순서
+  const returnCenterCode = product.returnCenterCode || env.COUPANG_RETURN_CENTER_CODE || '';
 
   // 카테고리 메타에서 고시 카테고리 조회
   const meta = await getCoupangCategoryMeta(env, product.categoryId);
 
-  // 고시정보 구성: noticeCategoryName 당 1개만 허용
-  let notices: any[] = [];
-
+  // 고시정보 구성
+  let notices: any[];
   if (product.noticeCategory) {
-    // 사용자가 모달에서 직접 지정한 경우 → 해당 카테고리만 사용
-    notices = [{ noticeCategoryName: product.noticeCategory, noticeCategoryDetailName: '품목 또는 명칭', content: '상세페이지 참조' }];
+    notices = [{
+      noticeCategoryName: product.noticeCategory,
+      noticeCategoryDetailName: NOTICE_DETAIL_MAP[product.noticeCategory] ?? '품명 및 모델명',
+      content: '상세페이지 참조',
+    }];
   } else if (meta.noticeCategories.length > 0) {
-    // meta API 카테고리 목록으로 각 카테고리당 1개
     notices = meta.noticeCategories.map(cat => ({
       noticeCategoryName: cat.noticeCategoryName,
-      noticeCategoryDetailName: '품목 또는 명칭',
+      noticeCategoryDetailName: getNoticeDetailName(cat.noticeCategoryName, cat.details),
       content: '상세페이지 참조',
     }));
   } else {
-    notices = [{ noticeCategoryName: '기타 재화', noticeCategoryDetailName: '품목 또는 명칭', content: '상세페이지 참조' }];
+    notices = [{
+      noticeCategoryName: '기타 재화',
+      noticeCategoryDetailName: '품명 및 모델명',
+      content: '상세페이지 참조',
+    }];
   }
 
   console.log('등록 디버그:', JSON.stringify({
@@ -189,6 +214,10 @@ export async function registerCoupangProduct(
     returnCenterCode,
     noticeCount: notices.length,
     firstNotice: notices[0],
+    adultOnly: product.adultOnlyYn,
+    overseasYn: product.overseasYn,
+    buyCountPeriod: product.buyCountPeriod,
+    buyCount: product.buyCount,
     rawCategoryMeta: JSON.stringify(meta).slice(0, 300),
   }));
 
@@ -204,11 +233,11 @@ export async function registerCoupangProduct(
     outboundShippingTimeDay: 2,
     unionDeliveryType: 'UNION_DELIVERY',
     deliveryMethod: 'PARCEL',
-    deliveryCompanyCode: 'CJGLS',
+    deliveryCompanyCode: 'LOGEN',
     deliveryChargeType: 'FREE',
     deliveryCharge: 0,
     freeShipOverAmount: 0,
-    remoteAreaYn: 'N',
+    remoteAreaYn: 'Y',
     returnCharge: 5000,
     returnChargeWithPackage: 5000,
     pccNeeded: false,
@@ -218,9 +247,12 @@ export async function registerCoupangProduct(
       {
         itemName: product.optionName || product.vendorItemName,
         taxType: 'TAX',
+        adultOnly: product.adultOnlyYn === 'Y',
+        overseasPurchaseAgencyYn: product.overseasYn === 'Y',
         originalPrice: product.originalPrice,
         salePrice: product.salePrice,
-        maximumBuyCount: 0,
+        maximumBuyCount: product.buyCount ?? 999,
+        maximumBuyCountPeriod: product.buyCountPeriod || 'MONTH',
         maximumBuyForPerson: 0,
         unitCount: 1,
         stockQuantity: product.stockQuantity || 99,
