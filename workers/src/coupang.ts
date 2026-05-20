@@ -115,8 +115,9 @@ export async function fetchReturnCenterCode(env: Env): Promise<string> {
           list = data;
         }
         const first = list[0];
-        // centerCode(실제 네트워크 확인된 필드명) 우선, 이후 fallback
-        const code = first?.centerCode || first?.returnCenterCode || first?.shippingPlaceCode || first?.code || '';
+        // returnShippingPlaceId가 실제 API가 요구하는 숫자 ID (3002397937 형태)
+        // centerCode는 표시용 코드이므로 후순위
+        const code = first?.returnShippingPlaceId || first?.centerCode || first?.returnCenterCode || first?.shippingPlaceCode || first?.code || '';
         if (code) { console.log('반품센터 코드 조회 성공:', code, 'from', p); return String(code); }
       }
     } catch {}
@@ -255,7 +256,7 @@ export async function registerCoupangProduct(
     returnCenterCode: returnCenterCode ? Number(returnCenterCode) : undefined,
     outboundShippingTimeDay: 2,
     unionDeliveryType: 'UNION_DELIVERY',
-    deliveryMethod: 'NORMAL',
+    deliveryMethod: 'PARCEL',
     deliveryCompanyCode: 'LOGEN',
     deliveryChargeType: 'FREE',
     deliveryCharge: 0,
@@ -270,8 +271,8 @@ export async function registerCoupangProduct(
       {
         itemName: product.optionName || product.vendorItemName,
         taxType: 'TAX',
-        ...(product.adultOnlyYn === 'Y' ? { adultOnly: true } : {}),
-        ...(product.overseasYn === 'Y' ? { overseasPurchaseAgencyYn: true } : {}),
+        adultOnly: product.adultOnlyYn === 'Y',
+        overseasPurchaseAgencyYn: product.overseasYn === 'Y',
         originalPrice: product.originalPrice,
         salePrice: product.salePrice,
         maximumBuyCount: product.buyCount ?? 999,
@@ -280,7 +281,6 @@ export async function registerCoupangProduct(
         unitCount: 1,
         stockQuantity: product.stockQuantity || 99,
         outboundShippingTimeDay: 2,
-        remoteAreaYn: 'N',
         images: product.images.filter(Boolean).slice(0, 10).map((url, i) => ({
           imageType: i === 0 ? 'REPRESENTATION' : 'DETAIL',
           cdnPath: url,
