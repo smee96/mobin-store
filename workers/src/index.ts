@@ -169,6 +169,22 @@ export default {
         return json(product);
       }
 
+      // GET /api/coupang/raw/:id  — 등록된 상품 원시 JSON (필드명 확인용)
+      if (path.match(/^\/api\/coupang\/raw\/\d+$/) && request.method === 'GET') {
+        const productId = path.split('/').pop()!;
+        const res = await fetch('https://proxy.mobin-inc.com/proxy/coupang', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-proxy-secret': 'mobin-proxy-2024-xK9mP3nQ' },
+          body: JSON.stringify({
+            path: `/v2/providers/seller_api/apis/api/v1/marketplace/seller-products/${productId}`,
+            method: 'GET',
+            accessKey: env.COUPANG_ACCESS_KEY,
+            secretKey: env.COUPANG_SECRET_KEY,
+          }),
+        });
+        return json(await res.json());
+      }
+
       // ══════════════════════════════════════════
       // 검색 상품 DB 등록
       // ══════════════════════════════════════════
