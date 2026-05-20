@@ -98,12 +98,15 @@ export async function fetchReturnCenterCode(env: Env): Promise<string> {
   // 1) 반품지 목록 API 경로 순서대로 시도
   const paths = [
     `/v2/providers/seller_api/apis/api/v1/marketplace/vendor/${env.COUPANG_VENDOR_ID}/return-ship-place-list`,
+    `/v2/providers/seller_api/apis/api/v1/marketplace/meta/return-ship-place-list`,
+    `/v2/providers/seller_api/apis/api/v1/marketplace/seller-return-centers`,
     `/v2/providers/openapi/apis/api/v3/vendors/${env.COUPANG_VENDOR_ID}/returnShipmentInfos`,
     `/v2/providers/seller_api/apis/api/v1/marketplace/seller/${env.COUPANG_VENDOR_ID}/return-ship-places`,
   ];
   for (const p of paths) {
     try {
       const { status, data } = await callCoupangViaProxy(env, 'GET', p);
+      console.log('반품센터 API:', p.split('/').pop(), 'status:', status, 'code:', data?.code, 'keys:', Object.keys(data || {}).join(','));
       if (status === 200) {
         // { code: 'SUCCESS', data: [...] } 또는 { content: [...] } 두 구조 모두 처리
         let list: any[] = [];
@@ -115,12 +118,12 @@ export async function fetchReturnCenterCode(env: Env): Promise<string> {
           list = data;
         }
         const first = list[0];
+        if (first) console.log('반품센터 첫번째 항목 키:', Object.keys(first).join(','));
         // returnShippingPlaceId가 실제 API가 요구하는 숫자 ID (3002397937 형태)
-        // centerCode는 표시용 코드이므로 후순위
         const code = first?.returnShippingPlaceId || first?.centerCode || first?.returnCenterCode || first?.shippingPlaceCode || first?.code || '';
-        if (code) { console.log('반품센터 코드 조회 성공:', code, 'from', p); return String(code); }
+        if (code) { console.log('반품센터 코드 조회 성공:', code, 'from', p.split('/').pop()); return String(code); }
       }
-    } catch {}
+    } catch (e) { console.error('반품센터 API 오류:', p.split('/').pop(), e); }
   }
 
   // 2) 기존 등록 상품에서 returnCenterCode 추출
@@ -257,7 +260,7 @@ export async function registerCoupangProduct(
     productType: 1,
     returnCenterCode: returnCenterCode ? Number(returnCenterCode) : undefined,
     outboundShippingTimeDay: 2,
-    unionDeliveryType: 'UNION_DELIVERY',
+    deliveryMethod: 'PARCEL',
     deliveryCompanyCode: 'LOGEN',
     deliveryChargeType: 'FREE',
     deliveryCharge: 0,
@@ -272,8 +275,8 @@ export async function registerCoupangProduct(
       {
         itemName: product.optionName || product.vendorItemName,
         taxType: 'TAX',
-        ...(product.adultOnlyYn === 'Y' ? { adultOnly: true } : {}),
-        ...(product.overseasYn === 'Y' ? { overseasPurchaseAgencyYn: true } : {}),
+        adultOnly: product.adultOnlyYn === 'Y' ? 'Y' : 'N',
+        overseasPurchaseAgencyYn: product.overseasYn === 'Y' ? 'Y' : 'N',
         originalPrice: product.originalPrice,
         salePrice: product.salePrice,
         maximumBuyCount: product.buyCount ?? 999,
@@ -282,6 +285,7 @@ export async function registerCoupangProduct(
         unitCount: 1,
         stockQuantity: product.stockQuantity || 99,
         outboundShippingTimeDay: 2,
+        remoteAreaYn: 'N',
         images: product.images.filter(Boolean).slice(0, 10).map((url, i) => ({
           imageType: i === 0 ? 'REPRESENTATION' : 'DETAIL',
           cdnPath: url,
