@@ -95,7 +95,7 @@ async function callCoupangViaProxy(
 
 // ─── 반품센터 코드 자동 조회 ───
 export async function fetchReturnCenterCode(env: Env): Promise<string> {
-  // 알려진 API 경로 순서대로 시도
+  // 1) 반품지 목록 API 경로 순서대로 시도
   const paths = [
     `/v2/providers/seller_api/apis/api/v1/marketplace/vendor/${env.COUPANG_VENDOR_ID}/return-ship-place-list`,
     `/v2/providers/openapi/apis/api/v3/vendors/${env.COUPANG_VENDOR_ID}/returnShipmentInfos`,
@@ -112,6 +112,20 @@ export async function fetchReturnCenterCode(env: Env): Promise<string> {
       }
     } catch {}
   }
+
+  // 2) 기존 등록 상품에서 returnCenterCode 추출
+  try {
+    const { status, data } = await callCoupangViaProxy(
+      env, 'GET',
+      `/v2/providers/seller_api/apis/api/v1/marketplace/seller-products?vendorId=${env.COUPANG_VENDOR_ID}&status=AVAILABLE&limit=1`
+    );
+    if (status === 200 && data.code === 'SUCCESS') {
+      const product = Array.isArray(data.data) ? data.data[0] : data.data?.content?.[0];
+      const code = product?.returnCenterCode || '';
+      if (code) { console.log('기존 상품에서 반품센터 코드 추출:', code); return String(code); }
+    }
+  } catch {}
+
   return '';
 }
 

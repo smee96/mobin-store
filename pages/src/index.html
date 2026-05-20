@@ -1140,8 +1140,8 @@ function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;'
           </div>
         </div>
         <div style="margin-top:10px">
-          <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">반품센터 코드 <span style="color:var(--danger);font-weight:700">*필수</span> <span style="color:var(--muted)">(wing.coupang.com → 판매자 정보 → 반품/출고지 에서 확인)</span></label>
-          <input id="crm-return-code" class="form-input" placeholder="예: 1002612213  ← wing에서 확인 필요" style="width:100%;box-sizing:border-box">
+          <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">반품센터 코드 <span style="font-size:10px">(비워두면 자동 조회 — 실패 시 wing.coupang.com 판매자 정보에서 확인)</span></label>
+          <input id="crm-return-code" class="form-input" placeholder="비워두면 자동 조회 (기존 등록 상품에서 추출)" style="width:100%;box-sizing:border-box">
         </div>
       </div>
     </div>
