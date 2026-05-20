@@ -205,8 +205,10 @@ export async function registerCoupangProduct(
 ): Promise<{ success: boolean; productId?: number; error?: string; _debug?: any }> {
   const path = `/v2/providers/seller_api/apis/api/v1/marketplace/seller-products`;
 
-  // 반품센터: product → env 순서
-  const returnCenterCode = product.returnCenterCode || env.COUPANG_RETURN_CENTER_CODE || '';
+  // 반품센터: API 조회(returnShippingPlaceId) → product → env 순서
+  // fetchReturnCenterCode는 returnShippingPlaceId를 우선 반환하므로 항상 먼저 시도
+  const fetchedCenter = await fetchReturnCenterCode(env);
+  const returnCenterCode = fetchedCenter || product.returnCenterCode || env.COUPANG_RETURN_CENTER_CODE || '';
 
   // 카테고리 메타에서 고시 카테고리 조회
   const meta = await getCoupangCategoryMeta(env, product.categoryId);
@@ -256,7 +258,6 @@ export async function registerCoupangProduct(
     returnCenterCode: returnCenterCode ? Number(returnCenterCode) : undefined,
     outboundShippingTimeDay: 2,
     unionDeliveryType: 'UNION_DELIVERY',
-    deliveryMethod: 'PARCEL',
     deliveryCompanyCode: 'LOGEN',
     deliveryChargeType: 'FREE',
     deliveryCharge: 0,
@@ -271,8 +272,8 @@ export async function registerCoupangProduct(
       {
         itemName: product.optionName || product.vendorItemName,
         taxType: 'TAX',
-        adultOnly: product.adultOnlyYn === 'Y',
-        overseasPurchaseAgencyYn: product.overseasYn === 'Y',
+        ...(product.adultOnlyYn === 'Y' ? { adultOnly: true } : {}),
+        ...(product.overseasYn === 'Y' ? { overseasPurchaseAgencyYn: true } : {}),
         originalPrice: product.originalPrice,
         salePrice: product.salePrice,
         maximumBuyCount: product.buyCount ?? 999,
