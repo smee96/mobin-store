@@ -104,10 +104,19 @@ export async function fetchReturnCenterCode(env: Env): Promise<string> {
   for (const p of paths) {
     try {
       const { status, data } = await callCoupangViaProxy(env, 'GET', p);
-      if (status === 200 && data.code === 'SUCCESS') {
-        const list = Array.isArray(data.data) ? data.data : (data.data?.content || []);
+      if (status === 200) {
+        // { code: 'SUCCESS', data: [...] } 또는 { content: [...] } 두 구조 모두 처리
+        let list: any[] = [];
+        if (data.code === 'SUCCESS') {
+          list = Array.isArray(data.data) ? data.data : (data.data?.content || []);
+        } else if (Array.isArray(data.content)) {
+          list = data.content;
+        } else if (Array.isArray(data)) {
+          list = data;
+        }
         const first = list[0];
-        const code = first?.returnCenterCode || first?.shippingPlaceCode || first?.code || '';
+        // centerCode(실제 네트워크 확인된 필드명) 우선, 이후 fallback
+        const code = first?.centerCode || first?.returnCenterCode || first?.shippingPlaceCode || first?.code || '';
         if (code) { console.log('반품센터 코드 조회 성공:', code, 'from', p); return String(code); }
       }
     } catch {}
@@ -243,15 +252,15 @@ export async function registerCoupangProduct(
     saleEndedAt: '2099-12-31T00:00:00',
     vendorUserId: env.COUPANG_VENDOR_ID,
     productType: 1,
-    returnCenterCode,
+    returnCenterCode: returnCenterCode ? Number(returnCenterCode) : undefined,
     outboundShippingTimeDay: 2,
     unionDeliveryType: 'UNION_DELIVERY',
-    deliveryMethod: 'PARCEL',
+    deliveryMethod: 'NORMAL',
     deliveryCompanyCode: 'LOGEN',
     deliveryChargeType: 'FREE',
     deliveryCharge: 0,
     freeShipOverAmount: 0,
-    remoteAreaYn: 'Y',
+    remoteAreaYn: 'N',
     returnCharge: 5000,
     returnChargeWithPackage: 5000,
     pccNeeded: false,
@@ -261,16 +270,17 @@ export async function registerCoupangProduct(
       {
         itemName: product.optionName || product.vendorItemName,
         taxType: 'TAX',
-        adultOnly: product.adultOnlyYn === 'Y',
-        overseasPurchaseAgencyYn: product.overseasYn === 'Y',
+        ...(product.adultOnlyYn === 'Y' ? { adultOnly: true } : {}),
+        ...(product.overseasYn === 'Y' ? { overseasPurchaseAgencyYn: true } : {}),
         originalPrice: product.originalPrice,
         salePrice: product.salePrice,
         maximumBuyCount: product.buyCount ?? 999,
-        maximumBuyCountPeriod: product.buyCountPeriod || 'MONTH',
+        maximumBuyCountPeriod: product.buyCountPeriod || 'ONCE',
         maximumBuyForPerson: 0,
         unitCount: 1,
         stockQuantity: product.stockQuantity || 99,
         outboundShippingTimeDay: 2,
+        remoteAreaYn: 'N',
         images: product.images.filter(Boolean).slice(0, 10).map((url, i) => ({
           imageType: i === 0 ? 'REPRESENTATION' : 'DETAIL',
           cdnPath: url,
@@ -291,6 +301,11 @@ export async function registerCoupangProduct(
     ],
     requiredDocuments: [],
   };
+
+  console.log('전송 payload (items[0] key 목록):', Object.keys(payload.items[0]));
+  console.log('delivery:', payload.deliveryMethod, payload.deliveryCompanyCode, 'remoteAreaYn:', payload.remoteAreaYn);
+  console.log('item.adultOnly:', (payload.items[0] as any).adultOnly, 'overseasPurchaseAgencyYn:', (payload.items[0] as any).overseasPurchaseAgencyYn);
+  console.log('maximumBuyCount:', (payload.items[0] as any).maximumBuyCount, 'period:', (payload.items[0] as any).maximumBuyCountPeriod);
 
   try {
     const { status, data } = await callCoupangViaProxy(env, 'POST', path, payload);
