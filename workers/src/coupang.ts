@@ -93,9 +93,18 @@ async function callCoupangViaProxy(
   return { status: res.status, data };
 }
 
-// ─── 반품센터 코드 자동 조회 ───
-export async function fetchReturnCenterCode(env: Env): Promise<string> {
-  // 1) 반품지 목록 API 경로 순서대로 시도
+interface ReturnShippingPlace {
+  code: string;
+  zipCode: string;
+  address: string;
+  addressDetail: string;
+  contactName: string;
+  phoneNumber: string;
+}
+
+// ─── 반품지 전체 정보 조회 (코드 + 주소 상세) ───
+async function fetchReturnShippingPlaceInfo(env: Env): Promise<ReturnShippingPlace> {
+  const empty: ReturnShippingPlace = { code: '', zipCode: '', address: '', addressDetail: '', contactName: '', phoneNumber: '' };
   const paths = [
     `/v2/providers/seller_api/apis/api/v1/marketplace/vendor/${env.COUPANG_VENDOR_ID}/return-ship-place-list`,
     `/v2/providers/seller_api/apis/api/v1/marketplace/meta/return-ship-place-list`,
@@ -108,7 +117,6 @@ export async function fetchReturnCenterCode(env: Env): Promise<string> {
       const { status, data } = await callCoupangViaProxy(env, 'GET', p);
       console.log('반품센터 API:', p.split('/').pop(), 'status:', status, 'code:', data?.code, 'keys:', Object.keys(data || {}).join(','));
       if (status === 200) {
-        // { code: 'SUCCESS', data: [...] } 또는 { content: [...] } 두 구조 모두 처리
         let list: any[] = [];
         if (data.code === 'SUCCESS') {
           list = Array.isArray(data.data) ? data.data : (data.data?.content || []);
@@ -118,15 +126,26 @@ export async function fetchReturnCenterCode(env: Env): Promise<string> {
           list = data;
         }
         const first = list[0];
-        if (first) console.log('반품센터 첫번째 항목 키:', Object.keys(first).join(','));
-        // returnShippingPlaceId가 실제 API가 요구하는 숫자 ID (3002397937 형태)
-        const code = first?.returnShippingPlaceId || first?.centerCode || first?.returnCenterCode || first?.shippingPlaceCode || first?.code || '';
-        if (code) { console.log('반품센터 코드 조회 성공:', code, 'from', p.split('/').pop()); return String(code); }
+        if (first) {
+          console.log('반품센터 전체 데이터:', JSON.stringify(first));
+          const code = first?.returnShippingPlaceId || first?.centerCode || first?.returnCenterCode || first?.shippingPlaceCode || first?.code || '';
+          if (code) {
+            console.log('반품센터 코드 조회 성공:', code, 'from', p.split('/').pop());
+            return {
+              code: String(code),
+              zipCode: String(first?.zipCode || first?.returnZipCode || first?.postalCode || first?.postCode || ''),
+              address: String(first?.addr || first?.address || first?.returnAddress || first?.streetAddress || ''),
+              addressDetail: String(first?.addrDetail || first?.addressDetail || first?.detailAddress || first?.addr2 || ''),
+              contactName: String(first?.contactName || first?.chargePersonName || first?.managerName || first?.name || ''),
+              phoneNumber: String(first?.phone || first?.phoneNumber || first?.contactPhone || first?.mobile || ''),
+            };
+          }
+        }
       }
     } catch (e) { console.error('반품센터 API 오류:', p.split('/').pop(), e); }
   }
 
-  // 2) 기존 등록 상품에서 returnCenterCode 추출
+  // 기존 등록 상품에서 코드만 추출 (주소는 알 수 없음)
   try {
     const { status, data } = await callCoupangViaProxy(
       env, 'GET',
@@ -135,11 +154,15 @@ export async function fetchReturnCenterCode(env: Env): Promise<string> {
     if (status === 200 && data.code === 'SUCCESS') {
       const product = Array.isArray(data.data) ? data.data[0] : data.data?.content?.[0];
       const code = product?.returnCenterCode || '';
-      if (code) { console.log('기존 상품에서 반품센터 코드 추출:', code); return String(code); }
+      if (code) { console.log('기존 상품에서 반품센터 코드 추출:', code); return { ...empty, code: String(code) }; }
     }
   } catch {}
 
-  return '';
+  return empty;
+}
+
+export async function fetchReturnCenterCode(env: Env): Promise<string> {
+  return (await fetchReturnShippingPlaceInfo(env)).code;
 }
 
 // ─── 카테고리 메타정보 조회 ───
@@ -208,10 +231,10 @@ export async function registerCoupangProduct(
 ): Promise<{ success: boolean; productId?: number; error?: string; _debug?: any }> {
   const path = `/v2/providers/seller_api/apis/api/v1/marketplace/seller-products`;
 
-  // 반품센터: 확실한 ID(env secret) → API 조회 → product → env(구 centerCode) 순서
-  const fetchedCenter = await fetchReturnCenterCode(env);
+  // 반품지 전체 정보 조회 (코드 + 주소)
+  const returnPlace = await fetchReturnShippingPlaceInfo(env);
   const returnCenterCode = env.COUPANG_RETURN_SHIPPING_PLACE_ID
-    || fetchedCenter
+    || returnPlace.code
     || env.COUPANG_RETURN_CENTER_CODE
     || product.returnCenterCode
     || '';
@@ -244,6 +267,7 @@ export async function registerCoupangProduct(
   console.log('등록 디버그:', JSON.stringify({
     categoryId: product.categoryId,
     returnCenterCode,
+    returnPlace,
     noticeCount: notices.length,
     firstNotice: notices[0],
     adultOnly: product.adultOnlyYn,
@@ -262,9 +286,14 @@ export async function registerCoupangProduct(
     vendorUserId: env.COUPANG_VENDOR_ID,
     productType: 1,
     returnCenterCode: returnCenterCode ? Number(returnCenterCode) : undefined,
+    returnZipCode: returnPlace.zipCode || undefined,
+    returnAddress: returnPlace.address || undefined,
+    returnAddressDetail: returnPlace.addressDetail || undefined,
+    returnContactName: returnPlace.contactName || undefined,
+    returnPhoneNumber: returnPlace.phoneNumber || undefined,
     outboundShippingTimeDay: 2,
     unionDeliveryType: 'UNION_DELIVERY',
-    deliveryMethod: 'PARCEL',
+    deliveryMethod: 'SEQUENCIAL',
     deliveryCompanyCode: 'LOGEN',
     deliveryChargeType: 'FREE',
     deliveryCharge: 0,
@@ -272,6 +301,7 @@ export async function registerCoupangProduct(
     remoteAreaYn: 'N',
     returnCharge: 5000,
     returnChargeWithPackage: 5000,
+    initialReturnCharge: 5000,
     pccNeeded: false,
     brand: product.brandName || '',
     manufacture: product.brandName || '',
@@ -279,12 +309,12 @@ export async function registerCoupangProduct(
       {
         itemName: product.optionName || product.vendorItemName,
         taxType: 'TAX',
-        ...(product.adultOnlyYn === 'Y' ? { adultOnly: true } : {}),
-        ...(product.overseasYn === 'Y' ? { overseasPurchaseAgencyYn: true } : {}),
+        adultOnly: product.adultOnlyYn === 'Y',
+        overseasPurchaseAgencyYn: product.overseasYn === 'Y',
         originalPrice: product.originalPrice,
         salePrice: product.salePrice,
         maximumBuyCount: product.buyCount ?? 999,
-        maximumBuyCountPeriod: product.buyCountPeriod || 'ONCE',
+        maximumBuyCountPeriod: product.buyCountPeriod || 'DAY',
         maximumBuyForPerson: 0,
         unitCount: 1,
         stockQuantity: product.stockQuantity || 99,
