@@ -13,6 +13,7 @@ export interface Env {
   COUPANG_SECRET_KEY: string;
   COUPANG_VENDOR_ID: string;
   COUPANG_RETURN_CENTER_CODE: string;
+  COUPANG_RETURN_SHIPPING_PLACE_ID?: string; // returnShippingPlaceId (실제 등록 API용 숫자 ID)
   SMART_STORE_URL: string;
   MIN_ROAS: string;
   DAILY_BUDGET_PER_AD: string;
