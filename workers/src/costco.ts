@@ -17,6 +17,8 @@ export interface CostcoProduct {
   rating?: number;
   reviewCount?: number;
   allImages?: string[];
+  promoStartDate?: string;
+  promoEndDate?: string;
 }
 
 const PROXY_URL = 'https://proxy.mobin-inc.com';
@@ -134,6 +136,8 @@ function parseCostcoProduct(p: any, keyword?: string): CostcoProduct {
 
   // 행사기간
   const period = promos[0]?.endDate ? `~ ${promos[0].endDate}` : '';
+  const promoStartDate: string | undefined = promos[0]?.startDate || undefined;
+  const promoEndDate: string | undefined = promos[0]?.endDate || undefined;
 
   const isSoldOut = p.stock?.stockLevelStatus === 'outOfStock' || false;
   const isMemberOnly = p.memberOnly ?? false;
@@ -170,5 +174,7 @@ function parseCostcoProduct(p: any, keyword?: string): CostcoProduct {
     rating,
     reviewCount,
     allImages,
+    promoStartDate,
+    promoEndDate,
   };
 }

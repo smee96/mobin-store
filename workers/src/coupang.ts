@@ -15,12 +15,14 @@ export interface CoupangProduct {
   brandName?: string;
   optionName?: string;
   returnCenterCode?: string;
-  // 사용자가 모달에서 직접 지정하는 필드
-  noticeCategory?: string;   // 고시정보 카테고리 (가공식품, 농수축산물 등)
-  adultOnlyYn?: string;      // 성인여부 (N/Y)
-  overseasYn?: string;       // 해외구매대행여부 (N/Y)
-  buyCountPeriod?: string;   // 최대구매수량 기간 (DAY/MONTH/ONCE)
-  buyCount?: number;         // 최대구매수량
+  noticeCategory?: string;
+  adultOnlyYn?: string;
+  overseasYn?: string;
+  buyCountPeriod?: string;
+  buyCount?: number;
+  deliveryCompanyCode?: string;
+  promoStartDate?: string;
+  promoEndDate?: string;
 }
 
 export interface CoupangRegisteredProduct {
@@ -233,16 +235,20 @@ export async function registerCoupangProduct(
 
   // 반품지 전체 정보 조회 (코드 + 주소)
   const returnPlace = await fetchReturnShippingPlaceInfo(env);
-  const returnCenterCode = env.COUPANG_RETURN_SHIPPING_PLACE_ID
+  const stripBom = (s: string) => s.replace(/^﻿/, '').trim();
+  const returnCenterCode = stripBom(
+    env.COUPANG_RETURN_SHIPPING_PLACE_ID
     || returnPlace.code
     || env.COUPANG_RETURN_CENTER_CODE
     || product.returnCenterCode
-    || '';
+    || ''
+  );
 
   // 카테고리 메타에서 고시 카테고리 조회
   const meta = await getCoupangCategoryMeta(env, product.categoryId);
 
-  // 고시정보 구성
+  // 고시정보 구성 — 한국 유효 카테고리만 허용
+  const VALID_NOTICE_CATEGORIES = new Set(Object.keys(NOTICE_DETAIL_MAP));
   let notices: any[];
   if (product.noticeCategory) {
     notices = [{
@@ -250,18 +256,22 @@ export async function registerCoupangProduct(
       noticeCategoryDetailName: NOTICE_DETAIL_MAP[product.noticeCategory] ?? '품명 및 모델명',
       content: '상세페이지 참조',
     }];
-  } else if (meta.noticeCategories.length > 0) {
-    notices = meta.noticeCategories.map(cat => ({
-      noticeCategoryName: cat.noticeCategoryName,
-      noticeCategoryDetailName: getNoticeDetailName(cat.noticeCategoryName, cat.details),
-      content: '상세페이지 참조',
-    }));
   } else {
-    notices = [{
-      noticeCategoryName: '기타 재화',
-      noticeCategoryDetailName: '품명 및 모델명',
-      content: '상세페이지 참조',
-    }];
+    const validCats = meta.noticeCategories.filter(c => VALID_NOTICE_CATEGORIES.has(c.noticeCategoryName));
+    if (validCats.length > 0) {
+      notices = validCats.map(cat => ({
+        noticeCategoryName: cat.noticeCategoryName,
+        noticeCategoryDetailName: getNoticeDetailName(cat.noticeCategoryName, cat.details),
+        content: '상세페이지 참조',
+      }));
+    } else {
+      // 카테고리 API가 유효한 한국 카테고리를 반환하지 않으면 기타 재화로 폴백
+      notices = [{
+        noticeCategoryName: '기타 재화',
+        noticeCategoryDetailName: '품명 및 모델명',
+        content: '상세페이지 참조',
+      }];
+    }
   }
 
   console.log('등록 디버그:', JSON.stringify({
@@ -277,13 +287,27 @@ export async function registerCoupangProduct(
     rawCategoryMeta: JSON.stringify(meta).slice(0, 300),
   }));
 
+  // 판매기간: 코스트코 행사기간 → 없으면 상시 판매
+  const toKstIso = (d: string) => {
+    try {
+      const kst = new Date(new Date(d).getTime() + 9 * 3600 * 1000);
+      return kst.toISOString().slice(0, 19);
+    } catch { return null; }
+  };
+  const saleStartedAt = product.promoStartDate
+    ? toKstIso(product.promoStartDate) ?? new Date().toISOString().slice(0, 19)
+    : new Date().toISOString().slice(0, 19);
+  const saleEndedAt = product.promoEndDate
+    ? toKstIso(product.promoEndDate) ?? '2099-12-31T23:59:59'
+    : '2099-12-31T23:59:59';
+
   const payload = {
     displayCategoryCode: product.categoryId,
     sellerProductName: product.vendorItemName,
     vendorId: env.COUPANG_VENDOR_ID,
-    saleStartedAt: new Date().toISOString().split('T')[0] + 'T00:00:00',
-    saleEndedAt: '2099-12-31T00:00:00',
-    vendorUserId: env.COUPANG_VENDOR_ID,
+    vendorUserId: env.COUPANG_VENDOR_USER_ID,
+    saleStartedAt,
+    saleEndedAt,
     productType: 1,
     returnCenterCode: returnCenterCode ? Number(returnCenterCode) : undefined,
     returnZipCode: Number(env.COUPANG_RETURN_ZIP_CODE || returnPlace.zipCode) || undefined,
@@ -291,16 +315,17 @@ export async function registerCoupangProduct(
     returnAddressDetail: env.COUPANG_RETURN_ADDRESS_DETAIL || returnPlace.addressDetail || undefined,
     returnChargeName: env.COUPANG_RETURN_CONTACT_NAME || returnPlace.contactName || undefined,
     companyContactNumber: env.COUPANG_RETURN_PHONE || returnPlace.phoneNumber || undefined,
+    outboundShippingPlaceCode: Number(env.COUPANG_OUTBOUND_SHIPPING_PLACE_CODE),
     outboundShippingTimeDay: 2,
     unionDeliveryType: 'UNION_DELIVERY',
     deliveryMethod: 'SEQUENCIAL',
-    deliveryCompanyCode: 'LOGEN',
+    deliveryCompanyCode: product.deliveryCompanyCode || env.COUPANG_DELIVERY_COMPANY_CODE || 'HYUNDAI',
     deliveryChargeType: 'FREE',
     deliveryCharge: 0,
     freeShipOverAmount: 0,
     remoteAreaDeliverable: 'Y',
     returnCharge: 6000,
-    returnChargeWithPackage: 6000,
+    deliveryChargeOnReturn: 0,
     pccNeeded: false,
     brand: product.brandName || '',
     manufacture: product.brandName || '',
@@ -320,11 +345,14 @@ export async function registerCoupangProduct(
         stockQuantity: product.stockQuantity || 99,
         outboundShippingTimeDay: 2,
         remoteAreaDeliverable: 'Y',
-        images: product.images.filter(Boolean).slice(0, 10).map((url, i) => ({
-          imageType: i === 0 ? 'REPRESENTATION' : 'DETAIL',
-          cdnPath: url,
-          vendorPath: url,
-        })),
+        images: (() => {
+          const rep = product.images.filter(Boolean)[0];
+          if (!rep) return [];
+          return [
+            { imageType: 'REPRESENTATION', cdnPath: rep, vendorPath: rep },
+            { imageType: 'DETAIL', cdnPath: rep, vendorPath: rep },
+          ];
+        })(),
         notices: notices.slice(0, 1),
         attributes: [],
         contents: [{
@@ -334,28 +362,29 @@ export async function registerCoupangProduct(
             detailType: 'TEXT',
           }],
         }],
-        searchTags: [product.keyword].filter(Boolean),
         certifications: [],
       }
     ],
     requiredDocuments: [],
   };
 
-  console.log('전송 payload (items[0] key 목록):', Object.keys(payload.items[0]));
-  console.log('delivery:', payload.deliveryMethod, payload.deliveryCompanyCode, 'remoteAreaYn:', payload.remoteAreaYn);
-  console.log('item.adultOnly:', (payload.items[0] as any).adultOnly, 'overseasPurchaseAgencyYn:', (payload.items[0] as any).overseasPurchaseAgencyYn);
-  console.log('maximumBuyCount:', (payload.items[0] as any).maximumBuyCount, 'period:', (payload.items[0] as any).maximumBuyCountPeriod);
+  let payloadJson = '';
+  try { payloadJson = JSON.stringify(payload); } catch (se) { console.error('payload serialize error:', se); }
+  console.log('전송 payload size:', payloadJson.length, 'returnCenterCode:', (payload as any).returnCenterCode, 'outboundCode:', (payload as any).outboundShippingPlaceCode);
 
   try {
     const { status, data } = await callCoupangViaProxy(env, 'POST', path, payload);
-    console.log('쿠팡 API 응답 status:', status, JSON.stringify(data).slice(0, 500));
+    console.log('쿠팡 API 응답 status:', status, JSON.stringify(data).slice(0, 800));
 
     if (status === 200 && data.code === 'SUCCESS') {
-      return { success: true, productId: data.data?.productId };
+      const d = data.data;
+      const productId = d?.productId || d?.sellerProductId || d?.id || (typeof d === 'number' ? d : null) || null;
+      console.log('등록 성공 productId:', productId, 'data.data:', JSON.stringify(d).slice(0, 200));
+      return { success: true, productId };
     } else {
       return {
         success: false,
-        error: data.message || data.code || `HTTP ${status}`,
+        error: data.message || JSON.stringify(data).slice(0, 300) || `HTTP ${status}`,
         _debug: {
           categoryId: product.categoryId,
           returnCenterCode,
@@ -363,12 +392,14 @@ export async function registerCoupangProduct(
           noticeCount: notices.length,
           firstNotice: notices[0],
           rawMeta: JSON.stringify(meta).slice(0, 500),
+          coupangResponse: JSON.stringify(data).slice(0, 500),
         },
       };
     }
   } catch (e: any) {
-    console.error('registerCoupangProduct error:', e);
-    return { success: false, error: e.message };
+    const errMsg = e?.message || (typeof e === 'string' ? e : JSON.stringify(e)) || 'proxy call failed';
+    console.error('registerCoupangProduct exception:', typeof e, errMsg, String(e));
+    return { success: false, error: errMsg, _debug: { exception: String(e) } };
   }
 }
 
@@ -412,10 +443,13 @@ export async function convertToCoupangProduct(
     buy_count_period?: string;
     buy_count?: number;
     category_code?: number;
+    delivery_company_code?: string;
+    promo_start_date?: string;
+    promo_end_date?: string;
   }
 ): Promise<CoupangProduct> {
-  const salePrice = source.suggested_sell_price;
-  const originalPrice = Math.round(salePrice * 1.15);
+  const salePrice = Math.round(source.suggested_sell_price / 10) * 10;
+  const originalPrice = Math.round(salePrice * 1.15 / 10) * 10;
 
   const brandName = source.title.split(' ')[0] || source.title;
 
@@ -481,6 +515,9 @@ export async function convertToCoupangProduct(
     overseasYn: source.overseas_yn || 'N',
     buyCountPeriod: source.buy_count_period || 'DAY',
     buyCount: source.buy_count ?? 999,
+    deliveryCompanyCode: source.delivery_company_code,
+    promoStartDate: source.promo_start_date,
+    promoEndDate: source.promo_end_date,
   };
 }
 
@@ -536,8 +573,8 @@ function findBestCategoryCode(
   for (const c of categories) {
     if (c.name.toLowerCase().includes(kw)) return c.code;
   }
-  // 3순위: 키워드 토큰 하나라도 매칭
-  const tokens = kw.split(/\s+/).filter(t => t.length >= 2);
+  // 3순위: 토큰을 역순(뒤→앞)으로 탐색 — 한국 상품명은 마지막 단어가 제품 종류
+  const tokens = kw.split(/\s+/).filter(t => t.length >= 2).reverse();
   for (const token of tokens) {
     for (const c of categories) {
       if (c.fullName.toLowerCase().includes(token) || c.name.toLowerCase().includes(token)) {

@@ -64,7 +64,8 @@ export default {
         const {
           title, keyword, suggested_sell_price, image_url, all_images, detail_url, costco_price,
           id: productDbId,
-          notice_category, adult_only, overseas_yn, buy_count_period, buy_count, return_center_code, category_code,
+          notice_category, adult_only, overseas_yn, buy_count_period, buy_count, return_center_code, category_code, delivery_company_code,
+          promo_start_date, promo_end_date,
         } = body;
         if (!title) return json({ error: 'title 필수' }, 400);
 
@@ -83,12 +84,16 @@ export default {
           buy_count_period,
           buy_count,
           category_code: category_code ? Number(category_code) : undefined,
+          delivery_company_code,
+          promo_start_date,
+          promo_end_date,
         });
 
         const result = await registerCoupangProduct(env, coupangProduct);
 
-        if (result.success && result.productId) {
-          const coupangUrl = `https://www.coupang.com/vp/products/${result.productId}`;
+        console.log('register result:', JSON.stringify(result).slice(0, 500));
+        if (result.success) {
+          const coupangUrl = result.productId ? `https://www.coupang.com/vp/products/${result.productId}` : null;
 
           // DB에 상품 저장
           const existing = productDbId
@@ -98,18 +103,39 @@ export default {
           if (existing) {
             await env.DB.prepare(
               `UPDATE products SET coupang_product_id = ?, coupang_url = ?, status = 'active', updated_at = datetime('now') WHERE id = ?`
-            ).bind(result.productId, coupangUrl, productDbId).run();
+            ).bind(result.productId ?? null, coupangUrl ?? null, productDbId).run();
           } else {
             await env.DB.prepare(
               `INSERT INTO products (name, keyword, coupang_product_id, coupang_url, price, margin_rate, source_url, source_image, status, score)
                VALUES (?, ?, ?, ?, ?, 60, ?, ?, 'active', 50)`
-            ).bind(title, keyword, result.productId, coupangUrl, suggested_sell_price, detail_url, image_url).run();
+            ).bind(title, keyword, result.productId ?? null, coupangUrl ?? null, suggested_sell_price ?? null, detail_url ?? null, image_url ?? null).run();
           }
 
           return json({ success: true, productId: result.productId, coupangUrl, message: '쿠팡에 상품이 등록되었습니다!' }, 201);
         } else {
           return json({ success: false, error: result.error, _debug: (result as any)._debug }, 400);
         }
+      }
+
+      // GET /api/coupang/delivery-companies — 유효한 택배사 코드 목록
+      if (path === '/api/coupang/delivery-companies' && request.method === 'GET') {
+        const tryPath = async (p: string) => {
+          const res = await fetch('https://proxy.mobin-inc.com/proxy/coupang', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-proxy-secret': 'mobin-proxy-2024-xK9mP3nQ' },
+            body: JSON.stringify({ path: p, method: 'GET', accessKey: env.COUPANG_ACCESS_KEY, secretKey: env.COUPANG_SECRET_KEY }),
+          });
+          const d = await res.json() as any;
+          return { path: p.split('/').pop(), status: res.status, code: d?.code, data: JSON.stringify(d).slice(0, 500) };
+        };
+        const results = await Promise.all([
+          tryPath(`/v2/providers/seller_api/apis/api/v1/marketplace/vendor/${env.COUPANG_VENDOR_ID}/outbound-shipping-places`),
+          tryPath(`/v2/providers/openapi/apis/api/v3/vendors/${env.COUPANG_VENDOR_ID}/outbound-shipping-places`),
+          tryPath(`/v2/providers/seller_api/apis/api/v1/marketplace/seller/${env.COUPANG_VENDOR_ID}/outbound-shipping-place-list`),
+          tryPath(`/v2/providers/openapi/apis/api/v3/vendors/${env.COUPANG_VENDOR_ID}/warehouse`),
+          tryPath(`/v2/providers/seller_api/apis/api/v1/marketplace/meta/courier-company-codes`),
+        ]);
+        return json(results);
       }
 
       // GET /api/coupang/categories?keyword=xxx  — 유효한 카테고리 ID 탐색용

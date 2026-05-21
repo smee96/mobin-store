@@ -908,6 +908,8 @@ async function submitCoupangRegister() {
       return_center_code: document.getElementById('crm-return-code').value.trim() || undefined,
       category_code: document.getElementById('crm-category-code').value ? Number(document.getElementById('crm-category-code').value) : undefined,
       delivery_company_code: document.getElementById('crm-delivery-company').value || undefined,
+      promo_start_date: crmProduct?.promoStartDate || undefined,
+      promo_end_date: crmProduct?.promoEndDate || undefined,
     }),
   });
   btn.disabled = false; btn.textContent = '✅ 쿠팡 등록하기';
