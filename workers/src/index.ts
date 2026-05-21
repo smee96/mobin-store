@@ -215,8 +215,16 @@ export default {
           d.vendorCommissionRate ??
           d.sellerCommissionRate ??
           null;
+        // 카테고리 전체 경로명 조회 (캐시에서)
+        let categoryName: string | null = null;
+        const catCached = await env.CACHE.get('coupang:categories:v1');
+        if (catCached) {
+          const cats: Array<{ code: number; name: string; fullName: string }> = JSON.parse(catCached);
+          const found = cats.find(c => c.code === Number(code));
+          if (found) categoryName = found.fullName;
+        }
         const allKeys = Object.keys(d);
-        const result = { commissionRate: rate, allKeys, raw: JSON.stringify(d).slice(0, 500) };
+        const result = { commissionRate: rate, categoryName, allKeys, raw: JSON.stringify(d).slice(0, 500) };
         if (rate !== null) await env.CACHE.put(cacheKey, JSON.stringify(result), { expirationTtl: 86400 });
         return json(result);
       }
