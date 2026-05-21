@@ -2,7 +2,19 @@
   "permissions": {
     "allow": [
       "WebFetch(domain:raw.githubusercontent.com)",
-      "WebFetch(domain:cloud.mkt.coupang.com)"
+      "WebFetch(domain:cloud.mkt.coupang.com)",
+      "Bash(npx wrangler *)",
+      "Bash(npm run *)",
+      "WebFetch(domain:mobin-store-worker.kyuhan-lee.workers.dev)",
+      "WebFetch(domain:developers.coupang.com)",
+      "WebFetch(domain:developers.coupangcorp.com)",
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:gist.github.com)",
+      "WebFetch(domain:wing.coupang.com)",
+      "Read(//c/Users/mobin_chairman/**)",
+      "Bash(git add *)",
+      "Bash(git commit *)"
     ]
   }
 }

@@ -956,6 +956,41 @@ function selectCoupangCat(code, name, keepOpen = false) {
   document.getElementById('crm-cat-code-badge').textContent = 'ID: ' + code;
   document.getElementById('crm-cat-code-badge').style.display = 'inline';
   if (!keepOpen) document.getElementById('crm-cat-results').style.display = 'none';
+  fetchCategoryCommission(code, name);
+}
+
+async function fetchCategoryCommission(code, categoryName) {
+  const data = await api('/api/coupang/commission?code=' + code);
+  const feeEl = document.getElementById('crm-fee');
+  const feeBadge = document.getElementById('crm-fee-badge');
+  if (data?.commissionRate != null) {
+    feeEl.value = data.commissionRate;
+    if (feeBadge) feeBadge.textContent = '자동조회: ' + data.commissionRate + '%';
+    if (feeBadge) feeBadge.style.display = 'inline';
+    recalcCrm();
+  } else {
+    // API에서 수수료를 가져오지 못한 경우 — 카테고리명 기반 추정
+    const rate = guessCommissionRate(categoryName || '');
+    feeEl.value = rate;
+    if (feeBadge) feeBadge.textContent = '추정: ' + rate + '% (Wing에서 확인 필요)';
+    if (feeBadge) feeBadge.style.display = 'inline';
+    recalcCrm();
+    console.log('수수료 API 미지원 카테고리. meta keys:', data?.allKeys, 'raw:', data?.raw);
+  }
+}
+
+function guessCommissionRate(fullName) {
+  const n = fullName;
+  if (/패션|의류|신발|가방|시계|쥬얼리|악세사리/.test(n)) return 10.0;
+  if (/프라이팬|냄비|취사도구|주방용품|조리/.test(n)) return 10.8;
+  if (/가전|디지털|냉장고|세탁기|청소기|에어컨|선풍기|제습|공기청정|TV|컴퓨터|노트북/.test(n)) return 7.8;
+  if (/식품|음료|과자|견과|라면|커피|차|건강식품|비타민/.test(n)) return 5.5;
+  if (/뷰티|화장품|스킨케어|헤어케어|바디케어/.test(n)) return 7.0;
+  if (/생활용품|세제|욕실|청소|위생/.test(n)) return 7.0;
+  if (/스포츠|레저|운동|자전거|캠핑/.test(n)) return 7.0;
+  if (/완구|장난감|취미|문구/.test(n)) return 7.0;
+  if (/반려동물|애완/.test(n)) return 7.0;
+  return 7.0;
 }
 
 function showCoupangError(msg) {
@@ -1081,7 +1116,12 @@ function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;'
         <div style="font-size:12px;font-weight:700;margin-bottom:8px">⑤ 가격 / 재고</div>
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px">
           <div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">마진율(%)</label><input id="crm-margin" class="form-input" type="number" value="15" style="width:100%;box-sizing:border-box" oninput="recalcCrm()"></div>
-          <div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">수수료(%)</label><input id="crm-fee" class="form-input" type="number" value="5.5" step="0.1" style="width:100%;box-sizing:border-box" oninput="recalcCrm()"></div>
+          <div>
+            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">수수료(%)
+              <span id="crm-fee-badge" style="display:none;margin-left:4px;font-size:10px;color:var(--accent);font-weight:400"></span>
+            </label>
+            <input id="crm-fee" class="form-input" type="number" value="5.5" step="0.1" style="width:100%;box-sizing:border-box" oninput="recalcCrm()">
+          </div>
           <div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">판매가(원) <span style="color:var(--danger)">*</span></label><input id="crm-price" class="form-input" type="number" style="width:100%;box-sizing:border-box" oninput="recalcCrmFromPrice()"></div>
           <div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">재고수량</label><input id="crm-stock" class="form-input" type="number" value="99" style="width:100%;box-sizing:border-box"></div>
         </div>

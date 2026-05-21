@@ -187,6 +187,40 @@ export default {
         return json({ total: categories.length, results: filtered });
       }
 
+      // GET /api/coupang/commission?code=80297  — 카테고리별 수수료율 조회
+      if (path === '/api/coupang/commission' && request.method === 'GET') {
+        const code = url.searchParams.get('code');
+        if (!code) return json({ error: 'code 필수' }, 400);
+        const cacheKey = `coupang:commission:${code}`;
+        const cached = await env.CACHE.get(cacheKey);
+        if (cached) return json(JSON.parse(cached));
+
+        const proxyBody = {
+          path: `/v2/providers/seller_api/apis/api/v1/marketplace/meta/category-related-metas/display-category-codes/${code}`,
+          method: 'GET',
+          accessKey: env.COUPANG_ACCESS_KEY,
+          secretKey: env.COUPANG_SECRET_KEY,
+        };
+        const res = await fetch('https://proxy.mobin-inc.com/proxy/coupang', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-proxy-secret': 'mobin-proxy-2024-xK9mP3nQ' },
+          body: JSON.stringify(proxyBody),
+        });
+        const meta = await res.json() as any;
+        const d = meta?.data || {};
+        // 수수료율 필드 탐색 (응답 구조에 따라 여러 경로 시도)
+        const rate: number | null =
+          d.commissionRate ??
+          d.commissionRates?.[0]?.commissionRate ??
+          d.vendorCommissionRate ??
+          d.sellerCommissionRate ??
+          null;
+        const allKeys = Object.keys(d);
+        const result = { commissionRate: rate, allKeys, raw: JSON.stringify(d).slice(0, 500) };
+        if (rate !== null) await env.CACHE.put(cacheKey, JSON.stringify(result), { expirationTtl: 86400 });
+        return json(result);
+      }
+
       // GET /api/coupang/product/:id
       if (path.match(/^\/api\/coupang\/product\/\d+$/) && request.method === 'GET') {
         const productId = parseInt(path.split('/').pop()!);
