@@ -805,13 +805,21 @@ function registerCostcoToCoupang(p) {
   document.getElementById('crm-brand').value = extractBrand(p.name);
   document.getElementById('crm-manufacturer').value = extractBrand(p.name);
   document.getElementById('crm-title').value = p.name;
-  document.getElementById('crm-category-name').value = guessCategoryName(p.name);
   document.getElementById('crm-option').value = extractOption(p.name);
   document.getElementById('crm-margin').value = 15;
   document.getElementById('crm-fee').value = 5.5;
   document.getElementById('crm-stock').value = 99;
   document.getElementById('crm-keyword').value = extractSearchKeyword(p.name);
   document.getElementById('crm-shipping-days').value = 2;
+
+  // 카테고리 초기화 후 자동 검색
+  document.getElementById('crm-category-name').value = '';
+  document.getElementById('crm-category-code').value = '';
+  document.getElementById('crm-cat-code-badge').style.display = 'none';
+  document.getElementById('crm-cat-results').style.display = 'none';
+  const words = p.name.trim().split(/\s+/).filter(w => w.length >= 2);
+  const productType = words[words.length - 1] || p.name;
+  document.getElementById('crm-cat-search').value = productType;
 
   const imgs = p.allImages || (p.imageUrl ? [p.imageUrl] : []);
   document.getElementById('crm-images-preview').innerHTML = imgs.slice(0, 5).map((url, i) =>
@@ -823,6 +831,7 @@ function registerCostcoToCoupang(p) {
 
   recalcCrm();
   document.getElementById('coupang-register-modal').style.display = 'flex';
+  searchCoupangCat(true);
 }
 
 function recalcCrm() {
@@ -898,6 +907,7 @@ async function submitCoupangRegister() {
       buy_count: parseInt(document.getElementById('crm-buy-count').value) || 999,
       return_center_code: document.getElementById('crm-return-code').value.trim() || undefined,
       category_code: document.getElementById('crm-category-code').value ? Number(document.getElementById('crm-category-code').value) : undefined,
+      delivery_company_code: document.getElementById('crm-delivery-company').value || undefined,
     }),
   });
   btn.disabled = false; btn.textContent = '✅ 쿠팡 등록하기';
@@ -912,7 +922,7 @@ async function submitCoupangRegister() {
   }
 }
 
-async function searchCoupangCat() {
+async function searchCoupangCat(autoSelect = false) {
   const kw = document.getElementById('crm-cat-search').value.trim();
   if (!kw) return;
   const el = document.getElementById('crm-cat-results');
@@ -932,14 +942,18 @@ async function searchCoupangCat() {
       <span style="margin-left:6px">${escHtml(c.fullName)}</span>
     </div>`
   ).join('');
+  if (autoSelect && data.results.length > 0) {
+    const first = data.results[0];
+    selectCoupangCat(first.code, first.fullName, true);
+  }
 }
 
-function selectCoupangCat(code, name) {
+function selectCoupangCat(code, name, keepOpen = false) {
   document.getElementById('crm-category-name').value = name;
   document.getElementById('crm-category-code').value = code;
   document.getElementById('crm-cat-code-badge').textContent = 'ID: ' + code;
   document.getElementById('crm-cat-code-badge').style.display = 'inline';
-  document.getElementById('crm-cat-results').style.display = 'none';
+  if (!keepOpen) document.getElementById('crm-cat-results').style.display = 'none';
 }
 
 function showCoupangError(msg) {
@@ -1104,11 +1118,13 @@ function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;'
             <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">고시정보 카테고리 <span style="font-size:10px">(비워두면 쿠팡 API 자동 결정)</span></label>
             <select id="crm-notice-cat" class="form-input" style="width:100%;box-sizing:border-box">
               <option value="">자동 (API 기반)</option>
+              <option value="기타 재화">기타 재화 (주방용품·가전·생활용품)</option>
               <option value="가공식품">가공식품 (포장·가공식품)</option>
               <option value="농수축산물">농수축산물 (신선식품)</option>
               <option value="건강기능식품">건강기능식품 (비타민·영양제)</option>
               <option value="생활화학제품">생활화학제품 (세제·청소용품)</option>
-              <option value="기타 재화">기타 재화</option>
+              <option value="섬유·의류">섬유·의류 (의류·패션)</option>
+              <option value="신발">신발</option>
             </select>
           </div>
           <div>
@@ -1139,9 +1155,24 @@ function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;'
             <input id="crm-buy-count" class="form-input" type="number" value="999" min="1" style="width:100%;box-sizing:border-box">
           </div>
         </div>
-        <div style="margin-top:10px">
-          <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">반품센터 코드 <span style="font-size:10px">(비워두면 자동 조회 — 실패 시 wing.coupang.com 판매자 정보에서 확인)</span></label>
-          <input id="crm-return-code" class="form-input" placeholder="비워두면 자동 조회 (기존 등록 상품에서 추출)" style="width:100%;box-sizing:border-box">
+        <div style="margin-top:10px;display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div>
+            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">택배사 코드</label>
+            <select id="crm-delivery-company" class="form-input" style="width:100%;box-sizing:border-box">
+              <option value="HYUNDAI" selected>HYUNDAI — 현대로지스틱스 ✓</option>
+              <option value="HANJIN">HANJIN — 한진택배</option>
+              <option value="CJ">CJ — CJ대한통운</option>
+              <option value="CJGLS">CJGLS — CJ대한통운(GLS)</option>
+              <option value="LOGEN">LOGEN — 로젠택배</option>
+              <option value="EPOST">EPOST — 우체국택배</option>
+              <option value="KDEXP">KDEXP — KD익스프레스</option>
+              <option value="ILYANG">ILYANG — 일양로지스</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">반품센터 코드 <span style="font-size:10px">(비워두면 자동)</span></label>
+            <input id="crm-return-code" class="form-input" placeholder="비워두면 자동 조회" style="width:100%;box-sizing:border-box">
+          </div>
         </div>
       </div>
     </div>
