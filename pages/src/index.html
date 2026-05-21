@@ -149,7 +149,8 @@
     <div class="nav-item" data-page="products" onclick="showPage('products',this)"><span class="nav-icon">📦</span> 상품 관리</div>
     <div class="nav-item" data-page="campaigns" onclick="showPage('campaigns',this)"><span class="nav-icon">📢</span> 광고 캠페인</div>
     <div class="nav-item" data-page="trends" onclick="showPage('trends',this)"><span class="nav-icon">📈</span> 트렌드 키워드</div>
-    <div class="nav-item" data-page="costco" onclick="showPage('costco',this)"><span class="nav-icon">🏬</span> 코스트코 스페셜할</div>
+    <div class="nav-item" data-page="costco" onclick="showPage('costco',this)"><span class="nav-icon">🏬</span> 코스트코 스페셜할인</div>
+    <div class="nav-item" data-page="costco-search" onclick="showPage('costco-search',this)"><span class="nav-icon">🔎</span> 상품검색(코스트코)</div>
     <div class="nav-item" data-page="logs" onclick="showPage('logs',this)"><span class="nav-icon">🔄</span> 자동화 로그</div>
     <div class="nav-item" data-page="settings" onclick="showPage('settings',this)" style="margin-top:auto"><span class="nav-icon">⚙️</span> 설정</div>
   </nav>
@@ -237,6 +238,48 @@
 
       <div id="costco-more" style="text-align:center;margin-top:20px;display:none">
         <button class="btn btn-outline" onclick="loadMoreCostco()">+ 더 보기</button>
+      </div>
+    </div>
+
+    <!-- 상품검색(코스트코) -->
+    <div id="page-costco-search" class="page">
+      <div class="topbar">
+        <div>
+          <div class="page-title">🔎 상품검색(코스트코)</div>
+          <div class="page-sub" id="costco-search-sub">키워드로 코스트코 상품을 검색하세요</div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:16px;padding:16px">
+        <div style="display:flex;gap:10px;align-items:center">
+          <input class="form-input" id="costco-search-kw" style="flex:1" placeholder="예: 프라이팬, 세제, 비타민..." onkeydown="if(event.key==='Enter')doCostcoSearch(0)">
+          <button class="btn btn-primary" onclick="doCostcoSearch(0)" style="white-space:nowrap;padding:0 20px;height:38px">🔍 검색</button>
+        </div>
+      </div>
+
+      <div class="card" style="padding:0;overflow:hidden">
+        <div style="overflow-x:auto">
+          <table class="costco-table">
+            <thead>
+              <tr>
+                <th style="min-width:230px;padding-left:16px">상품명</th>
+                <th style="text-align:right">판매금액</th>
+                <th style="text-align:center">할인</th>
+                <th style="text-align:center;color:var(--coupang)">쿠팡 검색</th>
+                <th style="text-align:center;color:#028a4a">네이버쇼핑</th>
+                <th style="text-align:center">쿠팡 등록</th>
+                <th style="text-align:center">코스트코</th>
+              </tr>
+            </thead>
+            <tbody id="costco-search-tbody">
+              <tr><td colspan="7" class="empty" style="color:var(--muted)">검색어를 입력하세요</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="costco-search-more" style="text-align:center;margin-top:20px;display:none">
+        <button class="btn btn-outline" onclick="loadMoreCostcoSearch()">+ 더 보기</button>
       </div>
     </div>
 
@@ -410,6 +453,7 @@ function showPage(name, el) {
   if (name === 'logs') loadLogs();
   if (name === 'search') initSearchPage();
   if (name === 'costco') initCostcoPage();
+  if (name === 'costco-search') setTimeout(() => document.getElementById('costco-search-kw')?.focus(), 100);
 }
 
 async function api(path, options = {}) {
@@ -710,6 +754,70 @@ async function loadMoreCostco() {
   document.getElementById('costco-more').style.display = data.hasMore ? 'block' : 'none';
   renderCostcoTable();
   costcoLoaded = true;
+}
+
+// ─── 상품검색(코스트코) ───
+let costcoSearchPage = 0, costcoSearchTotal = 0, costcoSearchKw = '';
+let costcoSearchProducts = [];
+
+async function doCostcoSearch(page) {
+  const kw = document.getElementById('costco-search-kw').value.trim();
+  if (!kw) { alert('검색어를 입력하세요.'); return; }
+  if (page === 0) {
+    costcoSearchProducts = [];
+    costcoSearchKw = kw;
+    document.getElementById('costco-search-tbody').innerHTML =
+      '<tr><td colspan="7" class="empty"><div class="spinner" style="margin:20px auto 8px"></div><div style="font-size:12px;color:var(--muted)">코스트코에서 검색 중...</div></td></tr>';
+    document.getElementById('costco-search-more').style.display = 'none';
+  }
+  costcoSearchPage = page;
+  const data = await api('/api/costco/search?keyword=' + encodeURIComponent(kw) + '&page=' + page);
+  if (!data || !data.products) {
+    document.getElementById('costco-search-tbody').innerHTML =
+      '<tr><td colspan="7" class="empty">검색 결과가 없습니다</td></tr>';
+    return;
+  }
+  costcoSearchTotal = data.total || 0;
+  costcoSearchProducts = [...costcoSearchProducts, ...(data.products || [])];
+  document.getElementById('costco-search-sub').textContent =
+    '"' + kw + '" 검색 결과 · ' + costcoSearchTotal + '개 중 ' + costcoSearchProducts.length + '개 표시';
+  document.getElementById('costco-search-more').style.display = data.hasMore ? 'block' : 'none';
+  renderCostcoSearchTable();
+}
+
+async function loadMoreCostcoSearch() {
+  await doCostcoSearch(costcoSearchPage + 1);
+}
+
+function renderCostcoSearchTable() {
+  const tbody = document.getElementById('costco-search-tbody');
+  if (!costcoSearchProducts.length) {
+    tbody.innerHTML = '<tr><td colspan="7" class="empty">검색 결과가 없습니다</td></tr>'; return;
+  }
+  tbody.innerHTML = costcoSearchProducts.map(p => {
+    const cpUrl = 'https://www.coupang.com/np/search?q=' + encodeURIComponent(p.name);
+    const nvUrl = 'https://search.shopping.naver.com/search/all?query=' + encodeURIComponent(p.name);
+    const pJson = encodeURIComponent(JSON.stringify(p));
+    return '<tr>' +
+      '<td style="padding-left:16px">' +
+        '<div style="display:flex;align-items:center;gap:10px">' +
+          '<img src="' + escHtml(p.imageUrl) + '" style="width:48px;height:48px;object-fit:cover;border-radius:6px;flex-shrink:0" onerror="this.style.display=\'none\'">' +
+          '<div>' +
+            '<div style="font-size:12px;font-weight:600;line-height:1.4;max-width:240px">' + escHtml(p.name) + '</div>' +
+            (p.matchedKeyword ? '<div style="font-size:10px;color:var(--accent);margin-top:2px">#' + escHtml(p.matchedKeyword) + '</div>' : '') +
+          '</div>' +
+        '</div>' +
+      '</td>' +
+      '<td style="text-align:right">' + renderCostcoPrice(p) +
+        (p.isSoldOut ? '<div style="font-size:10px;color:var(--danger)">품절</div>' : '') + '</td>' +
+      '<td style="text-align:center">' +
+        (p.discount ? '<div style="font-size:11px;color:var(--danger);font-weight:600">↓' + escHtml(p.discount) + '</div>' : '—') + '</td>' +
+      '<td style="text-align:center"><a href="' + cpUrl + '" target="_blank" rel="noopener" class="search-link-btn btn-coupang-link">💰 쿠팡 ↗</a></td>' +
+      '<td style="text-align:center"><a href="' + nvUrl + '" target="_blank" rel="noopener" class="search-link-btn btn-naver-link">💰 네이버 ↗</a></td>' +
+      '<td style="text-align:center"><button class="btn btn-coupang btn-sm" style="font-size:11px" onclick="registerCostcoToCoupang(decodeProduct(\'' + pJson + '\'))">🛒 등록</button></td>' +
+      '<td style="text-align:center"><a href="' + escHtml(p.url) + '" target="_blank" rel="noopener" class="btn btn-outline btn-sm" style="font-size:11px;padding:4px 8px">↗</a></td>' +
+    '</tr>';
+  }).join('');
 }
 
 function extractSearchKeyword(name) {

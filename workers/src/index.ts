@@ -391,6 +391,23 @@ export default {
         });
       }
 
+      // GET /api/costco/search?keyword=프라이팬&page=0
+      if (path === '/api/costco/search' && request.method === 'GET') {
+        const keyword = url.searchParams.get('keyword') || '';
+        const page = parseInt(url.searchParams.get('page') || '0');
+        if (!keyword) return json({ error: 'keyword 필수' }, 400);
+
+        const cacheKey = `costco:search:${encodeURIComponent(keyword)}:${page}`;
+        const cached = await env.CACHE.get(cacheKey);
+        if (cached) return new Response(cached, { headers: { 'Content-Type': 'application/json', ...corsHeaders, 'X-Cache': 'HIT' } });
+
+        const { searchCostcoByKeyword } = await import('./costco');
+        const data = await searchCostcoByKeyword(keyword, page, 20);
+        const resultJson = JSON.stringify(data);
+        await env.CACHE.put(cacheKey, resultJson, { expirationTtl: 300 });
+        return new Response(resultJson, { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+
       if (path === '/api/costco' && request.method === 'GET') {
         const page = parseInt(url.searchParams.get('page') || '0');
         const size = parseInt(url.searchParams.get('size') || '20');
