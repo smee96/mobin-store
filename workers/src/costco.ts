@@ -134,10 +134,13 @@ function parseCostcoProduct(p: any, keyword?: string): CostcoProduct {
   const discount = discountNum > 0 && originalPriceNum > 0
     ? Math.round((discountNum / originalPriceNum) * 100) + '%' : '';
 
-  // 행사기간
-  const period = promos[0]?.endDate ? `~ ${promos[0].endDate}` : '';
-  const promoStartDate: string | undefined = promos[0]?.startDate || undefined;
-  const promoEndDate: string | undefined = promos[0]?.endDate || undefined;
+  // 행사기간 (promotions 또는 couponDiscount 어디서든 추출)
+  const cd = p.couponDiscount;
+  const promoStartDate: string | undefined =
+    promos[0]?.startDate || cd?.discountStartDate || cd?.localDiscountStartDate || undefined;
+  const promoEndDate: string | undefined =
+    promos[0]?.endDate || cd?.discountEndDate || cd?.localDiscountEndDate || undefined;
+  const period = promoEndDate ? `~ ${promoEndDate.slice(0, 10)}` : '';
 
   const isSoldOut = p.stock?.stockLevelStatus === 'outOfStock' || false;
   const isMemberOnly = p.memberOnly ?? false;

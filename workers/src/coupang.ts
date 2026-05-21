@@ -288,17 +288,21 @@ export async function registerCoupangProduct(
   }));
 
   // 판매기간: 코스트코 행사기간 → 없으면 상시 판매
-  const toKstIso = (d: string) => {
+  const toKstIso = (d: string, endOfDay = false) => {
+    if (!d) return null;
     try {
+      // YYYY-MM-DD 형식 (모달 date input) → 시간 직접 붙이기
+      if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return `${d}T${endOfDay ? '23:59:59' : '00:00:00'}`;
+      // ISO 타임스탬프 → KST 변환
       const kst = new Date(new Date(d).getTime() + 9 * 3600 * 1000);
       return kst.toISOString().slice(0, 19);
     } catch { return null; }
   };
   const saleStartedAt = product.promoStartDate
-    ? toKstIso(product.promoStartDate) ?? new Date().toISOString().slice(0, 19)
+    ? toKstIso(product.promoStartDate, false) ?? new Date().toISOString().slice(0, 19)
     : new Date().toISOString().slice(0, 19);
   const saleEndedAt = product.promoEndDate
-    ? toKstIso(product.promoEndDate) ?? '2099-12-31T23:59:59'
+    ? toKstIso(product.promoEndDate, true) ?? '2099-12-31T23:59:59'
     : '2099-12-31T23:59:59';
 
   const payload = {

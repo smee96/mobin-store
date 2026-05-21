@@ -391,6 +391,33 @@ export default {
         });
       }
 
+      // GET /api/costco/product/:code — 개별 상품 상세 (판매기간 포함)
+      if (path.match(/^\/api\/costco\/product\/[^/]+$/) && request.method === 'GET') {
+        const code = path.split('/').pop()!;
+        const cacheKey = `costco:product:${code}`;
+        const cached = await env.CACHE.get(cacheKey);
+        if (cached) return new Response(cached, { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+
+        const res = await fetch(`https://proxy.mobin-inc.com/proxy/costco?productCode=${code}`, {
+          headers: { 'x-proxy-secret': 'mobin-proxy-2024-xK9mP3nQ' },
+        });
+        const data = await res.json() as any;
+        // 상품 데이터가 있으면 파싱, 없으면 raw 반환
+        const { parseCostcoProductForAPI } = await import('./costco');
+        const product = parseCostcoProductForAPI ? parseCostcoProductForAPI(data) : data;
+        const result = JSON.stringify({
+          promoStartDate: data.couponDiscount?.discountStartDate || data.couponDiscount?.localDiscountStartDate
+            || data.promotions?.[0]?.startDate || null,
+          promoEndDate: data.couponDiscount?.discountEndDate || data.couponDiscount?.localDiscountEndDate
+            || data.promotions?.[0]?.endDate || null,
+          period: data.couponDiscount?.discountEndDate
+            ? `~ ${data.couponDiscount.discountEndDate.slice(0,10)}` : null,
+          raw: JSON.stringify(data).slice(0, 600),
+        });
+        await env.CACHE.put(cacheKey, result, { expirationTtl: 300 });
+        return new Response(result, { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+
       // GET /api/costco/search?keyword=프라이팬&page=0
       if (path === '/api/costco/search' && request.method === 'GET') {
         const keyword = url.searchParams.get('keyword') || '';

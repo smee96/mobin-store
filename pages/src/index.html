@@ -920,9 +920,54 @@ function registerCostcoToCoupang(p) {
     '</div>'
   ).join('');
 
+  // 판매기간 초기화
+  const toDateInput = d => { try { return new Date(new Date(d).getTime() + 9*3600*1000).toISOString().slice(0,10); } catch { return ''; } };
+  const badge = document.getElementById('crm-period-badge');
+  if (p.promoStartDate || p.promoEndDate) {
+    document.getElementById('crm-sale-start').value = p.promoStartDate ? toDateInput(p.promoStartDate) : '';
+    document.getElementById('crm-sale-end').value = p.promoEndDate ? toDateInput(p.promoEndDate) : '';
+    if (badge) badge.textContent = '코스트코 행사기간 자동입력';
+  } else if (p.period) {
+    document.getElementById('crm-sale-start').value = '';
+    document.getElementById('crm-sale-end').value = p.period.replace(/^~\s*/, '').slice(0, 10);
+    if (badge) badge.textContent = p.period + ' (시작일 미확인 — 조회 버튼 클릭)';
+  } else {
+    document.getElementById('crm-sale-start').value = '';
+    document.getElementById('crm-sale-end').value = '';
+    if (badge) badge.textContent = '기간 없음 → 상시 판매';
+  }
+
   recalcCrm();
   document.getElementById('coupang-register-modal').style.display = 'flex';
   searchCoupangCat(true);
+}
+
+function clearSalePeriod() {
+  document.getElementById('crm-sale-start').value = '';
+  document.getElementById('crm-sale-end').value = '';
+  const badge = document.getElementById('crm-period-badge');
+  if (badge) badge.textContent = '설정안함 → 상시 판매';
+}
+
+async function fetchCostcoPeriod() {
+  if (!crmProduct) return;
+  const productId = crmProduct.id || crmProduct.url?.match(/\/p\/(\w+)/)?.[1];
+  if (!productId) { alert('상품 코드를 확인할 수 없습니다.'); return; }
+  const btn = document.getElementById('crm-fetch-period-btn');
+  btn.disabled = true; btn.textContent = '조회 중...';
+  const data = await api('/api/costco/product/' + productId);
+  btn.disabled = false; btn.textContent = '🔄 기간 조회';
+  if (!data) { alert('기간 조회 실패. 콘솔을 확인하세요.'); return; }
+  const badge = document.getElementById('crm-period-badge');
+  const toDateInput = d => { try { return new Date(new Date(d).getTime() + 9*3600*1000).toISOString().slice(0,10); } catch { return ''; } };
+  if (data.promoStartDate || data.promoEndDate) {
+    document.getElementById('crm-sale-start').value = data.promoStartDate ? toDateInput(data.promoStartDate) : '';
+    document.getElementById('crm-sale-end').value = data.promoEndDate ? toDateInput(data.promoEndDate) : '';
+    if (badge) badge.textContent = '조회 완료: ' + (data.period || '');
+  } else {
+    if (badge) badge.textContent = '기간 정보 없음 (raw: ' + (data.raw || '').slice(0, 80) + ')';
+    alert('판매기간을 찾을 수 없습니다.\n' + JSON.stringify(data, null, 2).slice(0, 300));
+  }
 }
 
 function recalcCrm() {
@@ -999,8 +1044,8 @@ async function submitCoupangRegister() {
       return_center_code: document.getElementById('crm-return-code').value.trim() || undefined,
       category_code: document.getElementById('crm-category-code').value ? Number(document.getElementById('crm-category-code').value) : undefined,
       delivery_company_code: document.getElementById('crm-delivery-company').value || undefined,
-      promo_start_date: crmProduct?.promoStartDate || undefined,
-      promo_end_date: crmProduct?.promoEndDate || undefined,
+      promo_start_date: document.getElementById('crm-sale-start').value || undefined,
+      promo_end_date: document.getElementById('crm-sale-end').value || undefined,
     }),
   });
   btn.disabled = false; btn.textContent = '✅ 쿠팡 등록하기';
@@ -1250,7 +1295,26 @@ function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;'
         </div>
       </div>
       <div>
-        <div style="font-size:12px;font-weight:700;margin-bottom:8px">⑨ 쿠팡 API 세부 설정 <span style="font-size:10px;color:var(--muted);font-weight:400">(오류 시 직접 조정)</span></div>
+        <div style="font-size:12px;font-weight:700;margin-bottom:8px">⑨ 판매기간
+          <span id="crm-period-badge" style="font-size:10px;color:var(--accent);font-weight:400;margin-left:6px"></span>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <div style="display:flex;align-items:center;gap:6px">
+            <label style="font-size:11px;color:var(--muted)">시작</label>
+            <input id="crm-sale-start" type="date" class="form-input" style="width:145px;box-sizing:border-box">
+          </div>
+          <span style="color:var(--muted)">~</span>
+          <div style="display:flex;align-items:center;gap:6px">
+            <label style="font-size:11px;color:var(--muted)">종료</label>
+            <input id="crm-sale-end" type="date" class="form-input" style="width:145px;box-sizing:border-box">
+          </div>
+          <button id="crm-fetch-period-btn" onclick="fetchCostcoPeriod()" class="btn btn-outline btn-sm" style="white-space:nowrap">🔄 기간 조회</button>
+          <button onclick="clearSalePeriod()" class="btn btn-outline btn-sm" style="white-space:nowrap;color:var(--muted)">설정안함</button>
+        </div>
+        <div style="font-size:10px;color:var(--muted);margin-top:4px">비워두면 상시 판매(2099-12-31)로 등록됩니다</div>
+      </div>
+      <div>
+        <div style="font-size:12px;font-weight:700;margin-bottom:8px">⑩ 쿠팡 API 세부 설정 <span style="font-size:10px;color:var(--muted);font-weight:400">(오류 시 직접 조정)</span></div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
           <div style="grid-column:1/-1">
             <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">고시정보 카테고리 <span style="font-size:10px">(비워두면 쿠팡 API 자동 결정)</span></label>
