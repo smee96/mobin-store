@@ -665,40 +665,22 @@ async function doSearch(page=1) {
         </div>
         <div class="product-card-actions">
           <a href="${p.detail_url}" target="_blank" rel="noopener" class="btn btn-outline btn-sm" style="flex:1;justify-content:center">상세보기</a>
-          <button class="btn btn-coupang btn-sm" style="flex:1" onclick='registerToCoupang(${JSON.stringify(p).replace(/\\/g,"\\\\").replace(/'/g,"&#39;")})'>🛒 쿠팡 등록</button>
+          <button class="btn btn-coupang btn-sm" style="flex:1" onclick='registerCostcoToCoupang(adaptAliProduct(${JSON.stringify(p).replace(/\\/g,"\\\\").replace(/'/g,"&#39;")}))'>🛒 쿠팡 등록</button>
         </div>
       </div>
     </div>`).join('');
 }
 
-async function registerToCoupang(p) {
-  if (!confirm(`"${p.title}"\n\n권장 판매가: ${p.suggested_sell_price.toLocaleString()}원\n예상 마진: ${p.estimated_margin}%\n\n쿠팡에 자동 등록할까요?`)) return;
-
-  const btn = event.target;
-  btn.disabled = true;
-  btn.textContent = '등록 중...';
-
-  const result = await api('/api/coupang/register', {
-    method: 'POST',
-    headers: {'Content-Type':'application/json'},
-    body: JSON.stringify(p),
-  });
-
-  btn.disabled = false;
-  btn.textContent = '🛒 쿠팡 등록';
-
-  if (result?.success) {
-    alert(`✅ 쿠팡 등록 완료!\n\n상품 관리 탭에서 확인하세요.\n쿠팡 URL: ${result.coupangUrl}`);
-    // 버튼을 성공 상태로 변경
-    btn.textContent = '✅ 등록됨';
-    btn.className = 'btn btn-sm';
-    btn.style.flex = '1';
-    btn.style.background = 'rgba(0,229,160,0.15)';
-    btn.style.color = 'var(--success)';
-    btn.disabled = true;
-  } else {
-    alert('등록 실패: ' + (result?.error || '알 수 없는 오류\n\nIP 허용 설정을 확인해주세요.'));
-  }
+// 알리익스프레스 상품 → 코스트코 모달 형식으로 변환
+function adaptAliProduct(p) {
+  return {
+    name: p.title || '',
+    imageUrl: p.image_url || '',
+    allImages: [p.image_url].filter(Boolean),
+    price: (p.price_min_krw || 0).toLocaleString('ko-KR') + '원',
+    priceNum: p.price_min_krw || 0,
+    url: p.detail_url || '',
+  };
 }
 
 // ─── 코스트코 × 트렌드 ───
