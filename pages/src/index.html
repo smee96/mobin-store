@@ -797,7 +797,7 @@ function renderCostcoSearchTable() {
         (p.discount ? '<div style="font-size:11px;color:var(--danger);font-weight:600">↓' + escHtml(p.discount) + '</div>' : '—') + '</td>' +
       '<td style="text-align:center"><a href="' + cpUrl + '" target="_blank" rel="noopener" class="search-link-btn btn-coupang-link">💰 쿠팡 ↗</a></td>' +
       '<td style="text-align:center"><a href="' + nvUrl + '" target="_blank" rel="noopener" class="search-link-btn btn-naver-link">💰 네이버 ↗</a></td>' +
-      '<td style="text-align:center"><button class="btn btn-coupang btn-sm" style="font-size:11px" onclick="registerCostcoToCoupang(decodeProduct(\'' + pJson + '\'))">🛒 등록</button></td>' +
+      '<td style="text-align:center"><button class="btn btn-coupang btn-sm" style="font-size:11px" onclick="registerCostcoToCoupang(decodeProduct(\'' + pJson + '\'))">🛒 쿠팡등록</button></td>' +
       '<td style="text-align:center"><a href="' + escHtml(p.url) + '" target="_blank" rel="noopener" class="btn btn-outline btn-sm" style="font-size:11px;padding:4px 8px">↗</a></td>' +
     '</tr>';
   }).join('');
@@ -875,7 +875,7 @@ function renderCostcoTable() {
         (p.discount ? '<div style="font-size:11px;color:var(--danger);font-weight:600">↓' + escHtml(p.discount) + '</div>' : '—') + '</td>' +
       '<td style="text-align:center"><a href="' + cpUrl + '" target="_blank" rel="noopener" class="search-link-btn btn-coupang-link">💰 쿠팡 ↗</a></td>' +
       '<td style="text-align:center"><a href="' + nvUrl + '" target="_blank" rel="noopener" class="search-link-btn btn-naver-link">💰 네이버 ↗</a></td>' +
-      '<td style="text-align:center"><button class="btn btn-coupang btn-sm" style="font-size:11px" onclick="registerCostcoToCoupang(decodeProduct(\'' + pJson + '\'))">🛒 등록</button></td>' +
+      '<td style="text-align:center"><button class="btn btn-coupang btn-sm" style="font-size:11px" onclick="registerCostcoToCoupang(decodeProduct(\'' + pJson + '\'))">🛒 쿠팡등록</button></td>' +
       '<td style="text-align:center"><a href="' + escHtml(p.url) + '" target="_blank" rel="noopener" class="btn btn-outline btn-sm" style="font-size:11px;padding:4px 8px">↗</a></td>' +
     '</tr>';
   }).join('');
