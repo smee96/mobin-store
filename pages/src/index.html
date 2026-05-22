@@ -920,6 +920,27 @@ function registerCostcoToCoupang(p) {
     '</div>'
   ).join('');
 
+  // 코스트코 상품 정보 (배송비, 최대구매)
+  const infoBox = document.getElementById('crm-costco-info-box');
+  const shippingEl = document.getElementById('crm-info-shipping');
+  const maxBuyEl = document.getElementById('crm-info-maxbuy');
+  let hasInfo = false;
+  if (p.shippingFeeText) {
+    document.getElementById('crm-info-shipping-val').textContent = p.shippingFeeText;
+    shippingEl.style.display = 'block';
+    hasInfo = true;
+  } else { shippingEl.style.display = 'none'; }
+  if (p.maxPurchase) {
+    document.getElementById('crm-info-maxbuy-val').textContent = p.maxPurchase;
+    maxBuyEl.style.display = 'block';
+    hasInfo = true;
+    // 쿠팡 최대구매수량 자동 입력
+    if (p.maxPurchaseNum > 0 && p.maxPurchaseNum < 999) {
+      document.getElementById('crm-buy-count').value = p.maxPurchaseNum;
+    }
+  } else { maxBuyEl.style.display = 'none'; }
+  infoBox.style.display = hasInfo ? 'block' : 'none';
+
   // 판매기간 초기화
   const toDateInput = d => { try { return new Date(new Date(d).getTime() + 9*3600*1000).toISOString().slice(0,10); } catch { return ''; } };
   const badge = document.getElementById('crm-period-badge');
@@ -1312,6 +1333,19 @@ function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;'
           <button onclick="clearSalePeriod()" class="btn btn-outline btn-sm" style="white-space:nowrap;color:var(--muted)">설정안함</button>
         </div>
         <div style="font-size:10px;color:var(--muted);margin-top:4px">비워두면 상시 판매(2099-12-31)로 등록됩니다</div>
+      </div>
+      <div id="crm-costco-info-box" style="display:none;background:rgba(108,71,232,.05);border:1px solid rgba(108,71,232,.15);border-radius:8px;padding:10px 14px;font-size:12px">
+        <div style="font-size:11px;font-weight:700;color:var(--accent);margin-bottom:6px">📦 코스트코 상품 정보</div>
+        <div style="display:flex;gap:20px;flex-wrap:wrap">
+          <div id="crm-info-shipping" style="display:none">
+            <span style="color:var(--muted)">배송비</span>
+            <span id="crm-info-shipping-val" style="font-weight:600;margin-left:6px"></span>
+          </div>
+          <div id="crm-info-maxbuy" style="display:none">
+            <span style="color:var(--muted)">최대구매</span>
+            <span id="crm-info-maxbuy-val" style="font-weight:600;margin-left:6px"></span>
+          </div>
+        </div>
       </div>
       <div>
         <div style="font-size:12px;font-weight:700;margin-bottom:8px">⑩ 쿠팡 API 세부 설정 <span style="font-size:10px;color:var(--muted);font-weight:400">(오류 시 직접 조정)</span></div>

@@ -11,6 +11,9 @@ export interface CostcoProduct {
   imageUrl: string;
   unit: string;
   maxPurchase: string;
+  maxPurchaseNum: number;
+  freeShipping: boolean | null;
+  shippingFeeText: string;
   isSoldOut: boolean;
   isMemberOnly: boolean;
   matchedKeyword?: string;
@@ -147,6 +150,22 @@ function parseCostcoProduct(p: any, keyword?: string): CostcoProduct {
   const rating = p.averageRating ?? 0;
   const reviewCount = p.numberOfReviews ?? 0;
 
+  // 최대구매수량
+  const maxPurchaseNum: number =
+    p.purchaseQuantityLimit ?? p.maxOrderQuantity ?? p.maxQuantity ?? p.unitQuantity ?? 0;
+  const maxPurchase = maxPurchaseNum > 0 ? `${maxPurchaseNum}개` : '';
+
+  // 배송비
+  const deliveryInfo = p.deliveryInfo || p.deliveryInformation || {};
+  const freeShipping: boolean | null =
+    p.freeShipping != null ? Boolean(p.freeShipping) :
+    deliveryInfo.freeDelivery != null ? Boolean(deliveryInfo.freeDelivery) :
+    (p.deliveryFee?.value === 0 || deliveryInfo.deliveryFee?.value === 0) ? true : null;
+  const shippingFeeText =
+    freeShipping === true ? '무료배송' :
+    freeShipping === false ? (deliveryInfo.deliveryFee?.formattedValue || '유료배송') :
+    '';
+
   // 전체 이미지 목록 (product → results → thumbnail 순)
   const sortOrder = ['product', 'results', 'thumbnail'];
   const allImages = [...images]
@@ -170,7 +189,10 @@ function parseCostcoProduct(p: any, keyword?: string): CostcoProduct {
     url: `https://www.costco.co.kr/p/${code}`,
     imageUrl,
     unit: '',
-    maxPurchase: '',
+    maxPurchase,
+    maxPurchaseNum,
+    freeShipping,
+    shippingFeeText,
     isSoldOut,
     isMemberOnly,
     matchedKeyword: keyword,
