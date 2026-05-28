@@ -74,6 +74,8 @@
   .btn-outline:hover{border-color:var(--accent);color:var(--accent);}
   .btn-coupang{background:var(--coupang);color:#fff;}
   .btn-coupang:hover{background:#c02d2e;}
+  .btn-naver{background:var(--naver);color:#fff;}
+  .btn-naver:hover{background:#02a34a;}
   .btn-sm{padding:5px 10px;font-size:12px;}
   .btn-danger{background:rgba(255,107,107,0.15);color:var(--danger);border:none;}
   .chart-container{position:relative;height:220px;}
@@ -797,7 +799,7 @@ function renderCostcoSearchTable() {
         (p.discount ? '<div style="font-size:11px;color:var(--danger);font-weight:600">↓' + escHtml(p.discount) + '</div>' : '—') + '</td>' +
       '<td style="text-align:center"><a href="' + cpUrl + '" target="_blank" rel="noopener" class="search-link-btn btn-coupang-link">💰 쿠팡 ↗</a></td>' +
       '<td style="text-align:center"><a href="' + nvUrl + '" target="_blank" rel="noopener" class="search-link-btn btn-naver-link">💰 네이버 ↗</a></td>' +
-      '<td style="text-align:center"><button class="btn btn-coupang btn-sm" style="font-size:11px" onclick="registerCostcoToCoupang(decodeProduct(\'' + pJson + '\'))">🛒 쿠팡등록</button></td>' +
+      '<td style="text-align:center"><button class="btn btn-coupang btn-sm" style="font-size:11px" onclick="openMarginCalc(decodeProduct(\'' + pJson + '\'))">💰 마진·등록</button></td>' +
       '<td style="text-align:center"><a href="' + escHtml(p.url) + '" target="_blank" rel="noopener" class="btn btn-outline btn-sm" style="font-size:11px;padding:4px 8px">↗</a></td>' +
     '</tr>';
   }).join('');
@@ -875,7 +877,7 @@ function renderCostcoTable() {
         (p.discount ? '<div style="font-size:11px;color:var(--danger);font-weight:600">↓' + escHtml(p.discount) + '</div>' : '—') + '</td>' +
       '<td style="text-align:center"><a href="' + cpUrl + '" target="_blank" rel="noopener" class="search-link-btn btn-coupang-link">💰 쿠팡 ↗</a></td>' +
       '<td style="text-align:center"><a href="' + nvUrl + '" target="_blank" rel="noopener" class="search-link-btn btn-naver-link">💰 네이버 ↗</a></td>' +
-      '<td style="text-align:center"><button class="btn btn-coupang btn-sm" style="font-size:11px" onclick="registerCostcoToCoupang(decodeProduct(\'' + pJson + '\'))">🛒 쿠팡등록</button></td>' +
+      '<td style="text-align:center"><button class="btn btn-coupang btn-sm" style="font-size:11px" onclick="openMarginCalc(decodeProduct(\'' + pJson + '\'))">💰 마진·등록</button></td>' +
       '<td style="text-align:center"><a href="' + escHtml(p.url) + '" target="_blank" rel="noopener" class="btn btn-outline btn-sm" style="font-size:11px;padding:4px 8px">↗</a></td>' +
     '</tr>';
   }).join('');
@@ -883,6 +885,140 @@ function renderCostcoTable() {
 
 function decodeProduct(encoded) {
   try { return JSON.parse(decodeURIComponent(encoded)); } catch { return {}; }
+}
+
+// ── 마진 계산 모달 ──
+const COUPANG_CATS = [
+  {name:'가전/디지털',fee:7.8},{name:'생활용품',fee:7.8},
+  {name:'식품',fee:10.6},{name:'건강식품',fee:10.6},
+  {name:'주방용품',fee:10.8},{name:'뷰티/헬스',fee:9.6},
+  {name:'패션의류',fee:10.5},{name:'스포츠/레저',fee:10.8},
+  {name:'완구/문구',fee:10.8},{name:'출산/유아',fee:10.0},
+  {name:'반려동물',fee:10.8},{name:'가구/인테리어',fee:10.8},
+  {name:'자동차용품',fee:10.0},{name:'도서/음반',fee:10.8},
+];
+const NAVER_CATS = [
+  {name:'패션의류',fee:3.74},{name:'패션잡화',fee:3.74},
+  {name:'화장품/미용',fee:3.74},{name:'디지털/가전',fee:2.85},
+  {name:'가구/인테리어',fee:3.74},{name:'출산/육아',fee:3.74},
+  {name:'식품',fee:3.74},{name:'스포츠/레저',fee:3.74},
+  {name:'생활/건강',fee:3.74},{name:'여가/취미',fee:3.74},
+  {name:'도서',fee:2.85},{name:'기타',fee:3.74},
+];
+
+let mcProduct = null;
+
+function initMcSelects() {
+  const cpSel = document.getElementById('mc-cp-cat');
+  const nvSel = document.getElementById('mc-nv-cat');
+  if (!cpSel.options.length) {
+    COUPANG_CATS.forEach(c => { const o = document.createElement('option'); o.value = c.fee; o.textContent = c.name + ' (' + c.fee + '%)'; cpSel.appendChild(o); });
+  }
+  if (!nvSel.options.length) {
+    NAVER_CATS.forEach(c => { const o = document.createElement('option'); o.value = c.fee; o.textContent = c.name + ' (' + c.fee + '%)'; nvSel.appendChild(o); });
+  }
+}
+
+function guessMcFee(name, platform) {
+  const k = name.toLowerCase();
+  if (platform === 'cp') {
+    if (/tv|가전|냉장고|세탁기|청소기|에어컨|선풍기|제습|공기청정|노트북|컴퓨터|카메라/.test(k)) return 7.8;
+    if (/세제|욕실|청소|위생|휴지|티슈/.test(k)) return 7.8;
+    if (/비타민|영양제|건강/.test(k)) return 10.6;
+    if (/식품|음료|과자|견과|라면|커피/.test(k)) return 10.6;
+    if (/프라이팬|냄비|주방|조리/.test(k)) return 10.8;
+    if (/화장품|크림|로션|세럼|샴푸|헤어/.test(k)) return 9.6;
+    if (/의류|패션|신발|가방/.test(k)) return 10.5;
+    if (/스포츠|레저|운동|캠핑|등산/.test(k)) return 10.8;
+    if (/완구|장난감|문구/.test(k)) return 10.8;
+    if (/유아|아기|출산/.test(k)) return 10.0;
+    if (/반려|애완|펫/.test(k)) return 10.8;
+    if (/가구|소파|침구|인테리어/.test(k)) return 10.8;
+    if (/도서|책|음반/.test(k)) return 10.8;
+    return 10.8;
+  } else {
+    if (/tv|가전|냉장고|세탁기|청소기|노트북|컴퓨터|카메라/.test(k)) return 2.85;
+    if (/도서|책/.test(k)) return 2.85;
+    return 3.74;
+  }
+}
+
+function openMarginCalc(p) {
+  mcProduct = p;
+  initMcSelects();
+  document.getElementById('mc-image').src = p.imageUrl || '';
+  document.getElementById('mc-name').textContent = p.name;
+  document.getElementById('mc-costco-price').textContent = p.price || '—';
+  const kw = encodeURIComponent(extractSearchKeyword(p.name));
+  document.getElementById('mc-cp-search-link').href = 'https://www.coupang.com/np/search?q=' + kw + '&sort=salePriceAsc';
+  document.getElementById('mc-nv-search-link').href = 'https://search.shopping.naver.com/search/all?query=' + kw + '&sort=price_asc';
+  document.getElementById('mc-cp-price').value = '';
+  document.getElementById('mc-nv-price').value = '';
+  document.getElementById('mc-cp-ship').value = 5000;
+  document.getElementById('mc-nv-ship').value = 5000;
+  const cpFee = guessMcFee(p.name, 'cp');
+  const nvFee = guessMcFee(p.name, 'nv');
+  const cpSel = document.getElementById('mc-cp-cat');
+  const nvSel = document.getElementById('mc-nv-cat');
+  for (let i = 0; i < cpSel.options.length; i++) { if (parseFloat(cpSel.options[i].value) === cpFee) { cpSel.selectedIndex = i; break; } }
+  for (let i = 0; i < nvSel.options.length; i++) { if (parseFloat(nvSel.options[i].value) === nvFee) { nvSel.selectedIndex = i; break; } }
+  document.getElementById('mc-cp-fee').value = cpFee;
+  document.getElementById('mc-nv-fee').value = nvFee;
+  recalcMC('cp'); recalcMC('nv');
+  document.getElementById('margin-calc-modal').style.display = 'flex';
+}
+
+function closeMarginCalc() {
+  document.getElementById('margin-calc-modal').style.display = 'none';
+  mcProduct = null;
+}
+
+function onMcCatChange(platform) {
+  document.getElementById('mc-' + platform + '-fee').value = document.getElementById('mc-' + platform + '-cat').value;
+  recalcMC(platform);
+}
+
+function recalcMC(platform) {
+  if (!mcProduct) return;
+  const costco = mcProduct.priceNum || 0;
+  const price = parseInt(document.getElementById('mc-' + platform + '-price').value) || 0;
+  const fee = parseFloat(document.getElementById('mc-' + platform + '-fee').value) || 0;
+  const _shipEl = document.getElementById('mc-' + platform + '-ship');
+  const ship = isNaN(_shipEl.valueAsNumber) ? 5000 : _shipEl.valueAsNumber;
+  const feeAmt = price > 0 ? Math.round(price * fee * 1.1 / 100) : 0;
+  const margin = price > 0 ? price - costco - feeAmt - ship : null;
+  const marginPct = (margin !== null && costco > 0) ? (margin / costco * 100).toFixed(1) : null;
+  document.getElementById('mc-' + platform + '-fee-amt').textContent = price > 0 ? '-' + feeAmt.toLocaleString('ko-KR') + '원' : '—';
+  const mEl = document.getElementById('mc-' + platform + '-margin');
+  const pEl = document.getElementById('mc-' + platform + '-margin-pct');
+  if (margin !== null) {
+    mEl.textContent = margin.toLocaleString('ko-KR') + '원';
+    mEl.style.color = margin >= 0 ? 'var(--success)' : 'var(--danger)';
+    pEl.textContent = '(' + marginPct + '%)';
+    pEl.style.color = margin >= 0 ? 'var(--success)' : 'var(--danger)';
+  } else {
+    mEl.textContent = '—'; mEl.style.color = ''; pEl.textContent = '';
+  }
+}
+
+function goToCoupangReg() {
+  if (!mcProduct) return;
+  const price = parseInt(document.getElementById('mc-cp-price').value) || 0;
+  const fee = parseFloat(document.getElementById('mc-cp-fee').value);
+  const saved = mcProduct;
+  closeMarginCalc();
+  registerCostcoToCoupang(saved);
+  if (price > 0) {
+    setTimeout(() => {
+      document.getElementById('crm-price').value = price;
+      if (fee) document.getElementById('crm-fee').value = fee;
+      recalcCrmFromPrice();
+    }, 80);
+  }
+}
+
+function goToNaverReg() {
+  alert('🚧 네이버 스마트스토어 등록 API 연동 준비 중입니다.\n현재는 마진 계산까지만 가능합니다.');
 }
 
 // ── 쿠팡 등록 모달 ──
@@ -899,6 +1035,7 @@ function registerCostcoToCoupang(p) {
   document.getElementById('crm-option').value = extractOption(p.name);
   document.getElementById('crm-margin').value = 15;
   document.getElementById('crm-fee').value = 5.5;
+  document.getElementById('crm-ship').value = 5000;
   document.getElementById('crm-stock').value = 99;
   document.getElementById('crm-keyword').value = extractSearchKeyword(p.name);
   document.getElementById('crm-shipping-days').value = 2;
@@ -1010,13 +1147,16 @@ function recalcCrmFromPrice() {
 
 function updateCrmCalc(cost, sell) {
   const fee = parseFloat(document.getElementById('crm-fee').value) || 5.5;
+  const shipInput = document.getElementById('crm-ship');
+  const ship = (!shipInput || isNaN(shipInput.valueAsNumber)) ? 5000 : shipInput.valueAsNumber;
   const feeAmt = Math.round(sell * fee * 1.1 / 100);
-  const net = sell - cost - feeAmt;
-  const netPct = cost > 0 ? (net / cost * 100).toFixed(1) : 0;
+  const net = sell - cost - feeAmt - ship;
+  const netPct = sell > 0 ? (net / sell * 100).toFixed(1) : 0;
   document.getElementById('crm-calc-cost').textContent = cost.toLocaleString('ko-KR') + '원';
   document.getElementById('crm-calc-sell').textContent = sell.toLocaleString('ko-KR') + '원';
-  document.getElementById('crm-fee-label').textContent = '수수료 (' + fee + '% + VAT)';
+  document.getElementById('crm-fee-label').textContent = '수수료 (' + fee + '% × 1.1)';
   document.getElementById('crm-calc-fee').textContent = '-' + feeAmt.toLocaleString('ko-KR') + '원';
+  document.getElementById('crm-calc-ship').textContent = '-' + ship.toLocaleString('ko-KR') + '원';
   document.getElementById('crm-calc-net').textContent = net.toLocaleString('ko-KR') + '원';
   document.getElementById('crm-calc-net').style.color = net >= 0 ? 'var(--success)' : 'var(--danger)';
   document.getElementById('crm-calc-net-pct').textContent = netPct + '%';
@@ -1039,8 +1179,10 @@ async function submitCoupangRegister() {
   if (!title) { alert('상품명을 입력하세요.'); return; }
   if (price <= 0) { alert('판매가격을 입력하세요.'); return; }
   const fee = parseFloat(document.getElementById('crm-fee').value) || 5.5;
+  const shipInput = document.getElementById('crm-ship');
+  const ship = (!shipInput || isNaN(shipInput.valueAsNumber)) ? 5000 : shipInput.valueAsNumber;
   const feeAmt = Math.round(price * fee * 1.1 / 100);
-  const net = price - (crmProduct?.priceNum || 0) - feeAmt;
+  const net = price - (crmProduct?.priceNum || 0) - feeAmt - ship;
   if (net < 0 && !confirm('실수익 ' + net.toLocaleString('ko-KR') + '원으로 손실 예상\n계속 등록하시겠습니까?')) return;
   const btn = document.getElementById('crm-submit-btn');
   btn.disabled = true; btn.textContent = '⏳ 등록 중...';
@@ -1231,6 +1373,100 @@ function compLevel(count) {
 function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 </script>
 
+<!-- 마진 계산 모달 -->
+<div id="margin-calc-modal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.6);align-items:flex-start;justify-content:center;overflow-y:auto;padding:20px 0">
+  <div style="background:var(--bg2);border-radius:16px;width:720px;max-width:96vw;box-shadow:0 20px 60px rgba(0,0,0,0.4);margin:auto">
+    <div style="padding:18px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;border-radius:16px 16px 0 0;background:var(--bg2)">
+      <div><div style="font-size:15px;font-weight:700">💰 마진 계산 · 플랫폼 등록</div><div style="font-size:11px;color:var(--muted);margin-top:2px">플랫폼별 최저가를 확인 후 입력하세요</div></div>
+      <button onclick="closeMarginCalc()" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--muted)">✕</button>
+    </div>
+    <div style="padding:12px 24px;background:var(--bg3);border-bottom:1px solid var(--border);display:flex;gap:12px;align-items:center">
+      <img id="mc-image" src="" alt="" style="width:60px;height:60px;object-fit:cover;border-radius:8px;flex-shrink:0" onerror="this.style.display='none'">
+      <div style="flex:1;min-width:0">
+        <div id="mc-name" style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></div>
+        <div style="font-size:12px;color:var(--muted);margin-top:3px">코스트코 원가: <span id="mc-costco-price" style="color:var(--accent4);font-weight:700;font-family:var(--mono)"></span></div>
+      </div>
+    </div>
+    <div style="padding:18px 24px;display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      <!-- 쿠팡 -->
+      <div style="background:rgba(232,57,58,0.04);border:1.5px solid rgba(232,57,58,0.3);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="font-size:13px;font-weight:700;color:var(--coupang)">🛒 쿠팡</div>
+          <a id="mc-cp-search-link" href="#" target="_blank" rel="noopener" style="font-size:11px;color:var(--coupang);border:1px solid rgba(232,57,58,0.35);border-radius:6px;padding:2px 8px;text-decoration:none;white-space:nowrap">검색 ↗</a>
+        </div>
+        <div>
+          <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">쿠팡 최저가 (원)</label>
+          <input id="mc-cp-price" class="form-input" type="number" placeholder="검색 후 직접 입력" style="width:100%;box-sizing:border-box" oninput="recalcMC('cp')">
+        </div>
+        <div>
+          <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">카테고리</label>
+          <select id="mc-cp-cat" class="form-input" style="width:100%;box-sizing:border-box" onchange="onMcCatChange('cp')"></select>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div>
+            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">수수료 % (+VAT)</label>
+            <input id="mc-cp-fee" class="form-input" type="number" step="0.1" style="width:100%;box-sizing:border-box" oninput="recalcMC('cp')">
+          </div>
+          <div>
+            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">택배비 (원)</label>
+            <input id="mc-cp-ship" class="form-input" type="number" value="5000" style="width:100%;box-sizing:border-box" oninput="recalcMC('cp')">
+          </div>
+        </div>
+        <div style="background:rgba(232,57,58,0.06);border-radius:8px;padding:10px;font-size:12px">
+          <div style="display:flex;justify-content:space-between"><span style="color:var(--muted)">수수료 (부가세 포함)</span><span id="mc-cp-fee-amt" style="font-weight:600;color:var(--danger)">—</span></div>
+          <div style="display:flex;justify-content:space-between;margin-top:6px;padding-top:6px;border-top:1px solid rgba(232,57,58,0.15)">
+            <span style="font-weight:700">예상 마진</span>
+            <div style="text-align:right">
+              <span id="mc-cp-margin" style="font-weight:700;font-family:var(--mono);font-size:13px">—</span>
+              <span id="mc-cp-margin-pct" style="font-size:11px;margin-left:5px"></span>
+            </div>
+          </div>
+        </div>
+        <button onclick="goToCoupangReg()" class="btn btn-coupang" style="width:100%;justify-content:center;margin-top:2px">🛒 쿠팡 등록하기</button>
+      </div>
+      <!-- 네이버 -->
+      <div style="background:rgba(3,199,90,0.04);border:1.5px solid rgba(3,199,90,0.3);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="font-size:13px;font-weight:700;color:var(--naver)">🏪 네이버</div>
+          <a id="mc-nv-search-link" href="#" target="_blank" rel="noopener" style="font-size:11px;color:var(--naver);border:1px solid rgba(3,199,90,0.35);border-radius:6px;padding:2px 8px;text-decoration:none;white-space:nowrap">검색 ↗</a>
+        </div>
+        <div>
+          <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">네이버 최저가 (원)</label>
+          <input id="mc-nv-price" class="form-input" type="number" placeholder="검색 후 직접 입력" style="width:100%;box-sizing:border-box" oninput="recalcMC('nv')">
+        </div>
+        <div>
+          <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">카테고리</label>
+          <select id="mc-nv-cat" class="form-input" style="width:100%;box-sizing:border-box" onchange="onMcCatChange('nv')"></select>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div>
+            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">수수료 % (+VAT)</label>
+            <input id="mc-nv-fee" class="form-input" type="number" step="0.1" style="width:100%;box-sizing:border-box" oninput="recalcMC('nv')">
+          </div>
+          <div>
+            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">택배비 (원)</label>
+            <input id="mc-nv-ship" class="form-input" type="number" value="5000" style="width:100%;box-sizing:border-box" oninput="recalcMC('nv')">
+          </div>
+        </div>
+        <div style="background:rgba(3,199,90,0.06);border-radius:8px;padding:10px;font-size:12px">
+          <div style="display:flex;justify-content:space-between"><span style="color:var(--muted)">수수료 (부가세 포함)</span><span id="mc-nv-fee-amt" style="font-weight:600;color:var(--danger)">—</span></div>
+          <div style="display:flex;justify-content:space-between;margin-top:6px;padding-top:6px;border-top:1px solid rgba(3,199,90,0.15)">
+            <span style="font-weight:700">예상 마진</span>
+            <div style="text-align:right">
+              <span id="mc-nv-margin" style="font-weight:700;font-family:var(--mono);font-size:13px">—</span>
+              <span id="mc-nv-margin-pct" style="font-size:11px;margin-left:5px"></span>
+            </div>
+          </div>
+        </div>
+        <button onclick="goToNaverReg()" class="btn btn-naver" style="width:100%;justify-content:center;margin-top:2px">🏪 네이버 등록하기</button>
+      </div>
+    </div>
+    <div style="padding:14px 24px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;border-radius:0 0 16px 16px;background:var(--bg2)">
+      <button onclick="closeMarginCalc()" class="btn btn-outline">닫기</button>
+    </div>
+  </div>
+</div>
+
 <!-- 쿠팡 등록 모달 -->
 <div id="coupang-register-modal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.6);align-items:flex-start;justify-content:center;overflow-y:auto;padding:20px 0">
   <div style="background:var(--bg2);border-radius:16px;width:600px;max-width:96vw;box-shadow:0 20px 60px rgba(0,0,0,0.4);margin:auto">
@@ -1276,16 +1512,17 @@ function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;'
       </div>
       <div>
         <div style="font-size:12px;font-weight:700;margin-bottom:8px">⑤ 가격 / 재고</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
           <div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">마진율(%)</label><input id="crm-margin" class="form-input" type="number" value="15" style="width:100%;box-sizing:border-box" oninput="recalcCrm()"></div>
           <div>
-            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">수수료(%)
+            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">수수료(% +VAT)
               <span id="crm-fee-badge" style="display:none;margin-left:4px;font-size:10px;color:var(--accent);font-weight:400"></span>
             </label>
             <input id="crm-fee" class="form-input" type="number" value="5.5" step="0.1" style="width:100%;box-sizing:border-box" oninput="recalcCrm()">
           </div>
           <div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">판매가(원) <span style="color:var(--danger)">*</span></label><input id="crm-price" class="form-input" type="number" style="width:100%;box-sizing:border-box" oninput="recalcCrmFromPrice()"></div>
           <div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">재고수량</label><input id="crm-stock" class="form-input" type="number" value="99" style="width:100%;box-sizing:border-box"></div>
+          <div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">택배비(원)</label><input id="crm-ship" class="form-input" type="number" value="5000" style="width:100%;box-sizing:border-box" oninput="recalcCrm()"></div>
         </div>
       </div>
       <div style="background:rgba(108,71,232,.06);border:1px solid rgba(108,71,232,.15);border-radius:8px;padding:12px;font-size:12px">
@@ -1294,6 +1531,7 @@ function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;'
           <div style="display:flex;justify-content:space-between"><span style="color:var(--muted)">원가</span><span id="crm-calc-cost" style="font-weight:600"></span></div>
           <div style="display:flex;justify-content:space-between"><span style="color:var(--muted)">판매가</span><span id="crm-calc-sell" style="font-weight:600;color:var(--accent)"></span></div>
           <div style="display:flex;justify-content:space-between"><span id="crm-fee-label" style="color:var(--muted)">수수료</span><span id="crm-calc-fee" style="color:var(--danger);font-weight:600"></span></div>
+          <div style="display:flex;justify-content:space-between"><span style="color:var(--muted)">택배비</span><span id="crm-calc-ship" style="color:var(--danger);font-weight:600"></span></div>
           <div style="display:flex;justify-content:space-between;border-top:1px solid rgba(108,71,232,.15);padding-top:4px;margin-top:2px;grid-column:1/-1">
             <span style="font-weight:700">실수익</span><span id="crm-calc-net" style="font-weight:700;font-size:13px"></span>
             <span style="color:var(--muted);margin-left:8px">실수익률</span><span id="crm-calc-net-pct" style="font-weight:700"></span>
