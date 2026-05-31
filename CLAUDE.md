@@ -115,6 +115,25 @@ D1 (mobin-store-db)  +  KV (CACHE)  +  Cron Triggers
 - `CLAUDE_API_KEY` — Anthropic
 - `REMOVEBG_API_KEY` — Remove.bg
 - `RAPIDAPI_KEY` — RapidAPI (AliExpress)
+- `NONOPRICE_INTERNAL_SECRET` — 노노프라이스(shark-lee-api) 서버간 연동 키 (`.env`에 저장)
+- `NONOPRICE_RESELLER_ID` — 노노프라이스 판매자 ID (`a20db28de71349eda47b4d2b411bd0f3`)
+- `NONOPRICE_API_URL` — shark-lee-api URL (`https://shark-lee-api.kyuhan-lee.workers.dev`)
+
+## 노노프라이스 연동
+
+```
+mobin-store Pages (코스트코 탭 🛒등록 버튼)
+       ↓
+mobin-store-worker POST /api/nonoprice/register
+       ↓  Bearer NONOPRICE_INTERNAL_SECRET
+shark-lee-api POST /api/v1/external/products
+       ↓
+D1 shark-lee-db (products 테이블, resellerId=a20db28d...)
+```
+
+- shark-lee-api repo: `/home/user/sb-git-refs/shark_lee/shark-lee-api`
+- external 라우터: `src/routes/external.ts`
+- Secret Key는 `.env`의 `NONOPRICE_INTERNAL_SECRET` 값과 동일하게 양쪽 Worker에 등록됨
 
 ## D1 / KV 바인딩
 

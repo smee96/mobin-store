@@ -563,7 +563,7 @@ export async function getCoupangDisplayCategories(
 }
 
 // API에서 가져온 카테고리 목록에서 키워드로 최적 매칭
-function findBestCategoryCode(
+export function findBestCategoryCode(
   categories: Array<{ code: number; name: string; fullName: string }>,
   keyword: string
 ): number | null {

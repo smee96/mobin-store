@@ -6,6 +6,7 @@ export interface CostcoProduct {
   originalPrice: string;
   discount: string;
   discountAmount: string;
+  discountNum: number;        // 할인금액 숫자 (원)
   period: string;
   url: string;
   imageUrl: string;
@@ -124,25 +125,43 @@ function parseCostcoProduct(p: any, keyword?: string): CostcoProduct {
     : '';
 
   // 가격 (이미 할인 적용된 최종가)
-  const priceNum = p.price?.value ?? 0;
+  const priceNum: number = p.price?.value ?? 0;
   const price = p.price?.formattedValue ?? '';
 
-  // 할인 금액 (promotions에서 추출)
-  const promos = p.promotions || [];
-  const discountNum = promos[0]?.discount?.value ?? 0;
+  // 할인 금액
+  // promotions[].discount.value 는 항상 비어있고,
+  // 실제 할인 데이터는 discountPrice.value / couponDiscount.discountValue 에 있음
+  const discountNum: number =
+    p.discountPrice?.value ??
+    p.couponDiscount?.discountValue ??
+    0;
+
+  // 정가 (basePrice가 있으면 그대로 사용, 없으면 priceNum + discountNum 계산)
+  const originalPriceNum: number =
+    p.basePrice?.value ??
+    (discountNum > 0 ? priceNum + discountNum : priceNum);
+
   const discountAmount = discountNum > 0 ? discountNum.toLocaleString('ko-KR') + '원' : '';
-  const originalPriceNum = discountNum > 0 ? priceNum + discountNum : 0;
-  const originalPrice = originalPriceNum > 0
+  const originalPrice = originalPriceNum > priceNum
     ? originalPriceNum.toLocaleString('ko-KR') + '원' : '';
   const discount = discountNum > 0 && originalPriceNum > 0
     ? Math.round((discountNum / originalPriceNum) * 100) + '%' : '';
 
-  // 행사기간 (promotions 또는 couponDiscount 어디서든 추출)
+  // 행사기간
+  // discountStartDate / discountEndDate 가 최상위 필드에 직접 존재
+  // fallback: promotions / couponDiscount
   const cd = p.couponDiscount;
+  const promos = p.promotions || [];
   const promoStartDate: string | undefined =
-    promos[0]?.startDate || cd?.discountStartDate || cd?.localDiscountStartDate || undefined;
+    p.discountStartDate ||
+    promos[0]?.startDate ||
+    cd?.discountStartDate || cd?.localDiscountStartDate ||
+    undefined;
   const promoEndDate: string | undefined =
-    promos[0]?.endDate || cd?.discountEndDate || cd?.localDiscountEndDate || undefined;
+    p.discountEndDate ||
+    promos[0]?.endDate ||
+    cd?.discountEndDate || cd?.localDiscountEndDate ||
+    undefined;
   const period = promoEndDate ? `~ ${promoEndDate.slice(0, 10)}` : '';
 
   const isSoldOut = p.stock?.stockLevelStatus === 'outOfStock' || false;
@@ -185,6 +204,7 @@ function parseCostcoProduct(p: any, keyword?: string): CostcoProduct {
     originalPrice,
     discount,
     discountAmount,
+    discountNum,
     period,
     url: `https://www.costco.co.kr/p/${code}`,
     imageUrl,

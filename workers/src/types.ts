@@ -26,6 +26,12 @@ export interface Env {
   MIN_ROAS: string;
   DAILY_BUDGET_PER_AD: string;
   MAX_ADS_RUNNING: string;
+  // ── 노노프라이스(shark-lee-api) 연동 ──
+  NONOPRICE_INTERNAL_SECRET: string;   // X-Internal-Key 헤더값 (shark-lee-api와 동일 값 공유)
+  NONOPRICE_RESELLER_ID: string;       // 판매자 #1 ID — 이규한 계정 (resellers.id)
+  NONOPRICE_RESELLER_ID_2?: string;    // 판매자 #2 ID — 이재성 계정 (선택, 설정 시 병렬 등록)
+  NONOPRICE_API_URL: string;           // shark-lee-api Worker URL (fallback)
+  SHARK_LEE_API: Fetcher;              // Service Binding (workers.dev 1042 오류 우회)
 }
 
 export interface Product {
