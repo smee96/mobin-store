@@ -1,9 +1,15 @@
 import { Env } from './types';
 import { handleScheduled } from './scheduler';
 import { search1688 } from './search1688';
-import { registerCoupangProduct, getCoupangProduct, convertToCoupangProduct, getCoupangDisplayCategories, fetchReturnCenterCode } from './coupang';
-import { getCostcoDealsByKeywords } from './costco';
+import { registerCoupangProduct, getCoupangProduct, convertToCoupangProduct, getCoupangDisplayCategories, findBestCategoryCode } from './coupang';
+import { getCostcoDealsByKeywords, searchCostcoByKeyword } from './costco';
 import { comparePrices } from './priceCompare';
+import {
+  registerToNonopriceAll,
+  batchRegisterToNonoprice,
+  getNonoPriceResellerInfo,
+  isNonoPriceConfigured,
+} from './nonoprice';
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -117,116 +123,42 @@ export default {
         }
       }
 
-      // GET /api/coupang/delivery-companies — 유효한 택배사 코드 목록
-      if (path === '/api/coupang/delivery-companies' && request.method === 'GET') {
-        const tryPath = async (p: string) => {
-          const res = await fetch('https://proxy.mobin-inc.com/proxy/coupang', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'x-proxy-secret': 'mobin-proxy-2024-xK9mP3nQ' },
-            body: JSON.stringify({ path: p, method: 'GET', accessKey: env.COUPANG_ACCESS_KEY, secretKey: env.COUPANG_SECRET_KEY }),
-          });
-          const d = await res.json() as any;
-          return { path: p.split('/').pop(), status: res.status, code: d?.code, data: JSON.stringify(d).slice(0, 500) };
-        };
-        const results = await Promise.all([
-          tryPath(`/v2/providers/seller_api/apis/api/v1/marketplace/vendor/${env.COUPANG_VENDOR_ID}/outbound-shipping-places`),
-          tryPath(`/v2/providers/openapi/apis/api/v3/vendors/${env.COUPANG_VENDOR_ID}/outbound-shipping-places`),
-          tryPath(`/v2/providers/seller_api/apis/api/v1/marketplace/seller/${env.COUPANG_VENDOR_ID}/outbound-shipping-place-list`),
-          tryPath(`/v2/providers/openapi/apis/api/v3/vendors/${env.COUPANG_VENDOR_ID}/warehouse`),
-          tryPath(`/v2/providers/seller_api/apis/api/v1/marketplace/meta/courier-company-codes`),
-        ]);
-        return json(results);
-      }
-
-      // GET /api/coupang/categories?keyword=xxx  — 유효한 카테고리 ID 탐색용
+      // GET /api/coupang/categories?keyword=...
       if (path === '/api/coupang/categories' && request.method === 'GET') {
         const keyword = url.searchParams.get('keyword') || '';
-        const debug = url.searchParams.get('debug') === '1';
-
-        // debug=1 이면 반품센터 목록 + 카테고리 메타 raw 응답 반환
-        if (debug) {
-          const proxyCall = async (p: string) => {
-            const res = await fetch(`https://proxy.mobin-inc.com/proxy/coupang`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', 'x-proxy-secret': 'mobin-proxy-2024-xK9mP3nQ' },
-              body: JSON.stringify({ path: p, method: 'GET', accessKey: env.COUPANG_ACCESS_KEY, secretKey: env.COUPANG_SECRET_KEY }),
-            });
-            return { status: res.status, data: await res.json() as any };
-          };
-          const catCode = url.searchParams.get('catCode') || '59411';
-          // 반품센터: 여러 경로 시도
-          const rcPaths = [
-            `/v2/providers/seller_api/apis/api/v1/marketplace/vendor/${env.COUPANG_VENDOR_ID}/return-ship-place-list`,
-            `/v2/providers/seller_api/apis/api/v1/marketplace/meta/return-ship-place-list`,
-            `/v2/providers/seller_api/apis/api/v1/marketplace/seller-return-centers`,
-          ];
-          const rcResults: any[] = [];
-          for (const p of rcPaths) {
-            const r = await proxyCall(p);
-            rcResults.push({ path: p.split('/').pop(), status: r.status, code: r.data.code, msg: (r.data.message || '').slice(0, 80) });
+        try {
+          const categories = await getCoupangDisplayCategories(env);
+          if (!keyword) {
+            return json({ results: categories.slice(0, 100) });
           }
-          // 카테고리 메타: noticeCategories 만 추출
-          const meta = await proxyCall(`/v2/providers/seller_api/apis/api/v1/marketplace/meta/category-related-metas/display-category-codes/${catCode}`);
-          const noticeCategories = meta.data.data?.noticeCategories;
+          // 키워드 필터링 (findBestCategoryCode 로직과 동일하게 점수순 정렬)
+          const kw = keyword.toLowerCase();
+          const scored = categories
+            .map(c => {
+              const fn = c.fullName.toLowerCase();
+              const n = c.name.toLowerCase();
+              let score = 0;
+              if (fn === kw || n === kw) score = 100;
+              else if (fn.includes(kw) || n.includes(kw)) score = 80;
+              else {
+                const tokens = kw.split(/\s+/).filter(t => t.length >= 2);
+                for (const t of tokens) {
+                  if (fn.includes(t) || n.includes(t)) { score = Math.max(score, 50); }
+                }
+              }
+              return { ...c, score };
+            })
+            .filter(c => c.score > 0)
+            .sort((a, b) => b.score - a.score);
+          // 결과 없으면 guessCategoryId fallback 포함해서 안내
+          const bestCode = scored.length ? null : findBestCategoryCode(categories, keyword);
           return json({
-            returnCenterTests: rcResults,
-            categoryMeta: {
-              status: meta.status, code: meta.data.code,
-              noticeCategories: JSON.stringify(noticeCategories).slice(0, 1000),
-              keys: Object.keys(meta.data.data || {}),
-            },
+            results: scored.length ? scored : (bestCode ? categories.filter(c => c.code === bestCode) : []),
+            total: categories.length,
           });
+        } catch (e: any) {
+          return json({ error: e.message ?? '카테고리 조회 오류' }, 500);
         }
-
-        const categories = await getCoupangDisplayCategories(env);
-        const filtered = keyword
-          ? categories.filter(c =>
-              c.fullName.includes(keyword) || c.name.includes(keyword)
-            )
-          : categories.slice(0, 100);
-        return json({ total: categories.length, results: filtered });
-      }
-
-      // GET /api/coupang/commission?code=80297  — 카테고리별 수수료율 조회
-      if (path === '/api/coupang/commission' && request.method === 'GET') {
-        const code = url.searchParams.get('code');
-        if (!code) return json({ error: 'code 필수' }, 400);
-        const cacheKey = `coupang:commission:${code}`;
-        const cached = await env.CACHE.get(cacheKey);
-        if (cached) return json(JSON.parse(cached));
-
-        const proxyBody = {
-          path: `/v2/providers/seller_api/apis/api/v1/marketplace/meta/category-related-metas/display-category-codes/${code}`,
-          method: 'GET',
-          accessKey: env.COUPANG_ACCESS_KEY,
-          secretKey: env.COUPANG_SECRET_KEY,
-        };
-        const res = await fetch('https://proxy.mobin-inc.com/proxy/coupang', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-proxy-secret': 'mobin-proxy-2024-xK9mP3nQ' },
-          body: JSON.stringify(proxyBody),
-        });
-        const meta = await res.json() as any;
-        const d = meta?.data || {};
-        // 수수료율 필드 탐색 (응답 구조에 따라 여러 경로 시도)
-        const rate: number | null =
-          d.commissionRate ??
-          d.commissionRates?.[0]?.commissionRate ??
-          d.vendorCommissionRate ??
-          d.sellerCommissionRate ??
-          null;
-        // 카테고리 전체 경로명 조회 (캐시에서)
-        let categoryName: string | null = null;
-        const catCached = await env.CACHE.get('coupang:categories:v1');
-        if (catCached) {
-          const cats: Array<{ code: number; name: string; fullName: string }> = JSON.parse(catCached);
-          const found = cats.find(c => c.code === Number(code));
-          if (found) categoryName = found.fullName;
-        }
-        const allKeys = Object.keys(d);
-        const result = { commissionRate: rate, categoryName, allKeys, raw: JSON.stringify(d).slice(0, 500) };
-        if (rate !== null) await env.CACHE.put(cacheKey, JSON.stringify(result), { expirationTtl: 86400 });
-        return json(result);
       }
 
       // GET /api/coupang/product/:id
@@ -235,22 +167,6 @@ export default {
         const product = await getCoupangProduct(env, productId);
         if (!product) return json({ error: '상품을 찾을 수 없습니다' }, 404);
         return json(product);
-      }
-
-      // GET /api/coupang/raw/:id  — 등록된 상품 원시 JSON (필드명 확인용)
-      if (path.match(/^\/api\/coupang\/raw\/\d+$/) && request.method === 'GET') {
-        const productId = path.split('/').pop()!;
-        const res = await fetch('https://proxy.mobin-inc.com/proxy/coupang', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-proxy-secret': 'mobin-proxy-2024-xK9mP3nQ' },
-          body: JSON.stringify({
-            path: `/v2/providers/seller_api/apis/api/v1/marketplace/seller-products/${productId}`,
-            method: 'GET',
-            accessKey: env.COUPANG_ACCESS_KEY,
-            secretKey: env.COUPANG_SECRET_KEY,
-          }),
-        });
-        return json(await res.json());
       }
 
       // ══════════════════════════════════════════
@@ -391,50 +307,6 @@ export default {
         });
       }
 
-      // GET /api/costco/product/:code — 개별 상품 상세 (판매기간 포함)
-      if (path.match(/^\/api\/costco\/product\/[^/]+$/) && request.method === 'GET') {
-        const code = path.split('/').pop()!;
-        const cacheKey = `costco:product:${code}`;
-        const cached = await env.CACHE.get(cacheKey);
-        if (cached) return new Response(cached, { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
-
-        const res = await fetch(`https://proxy.mobin-inc.com/proxy/costco?productCode=${code}`, {
-          headers: { 'x-proxy-secret': 'mobin-proxy-2024-xK9mP3nQ' },
-        });
-        const data = await res.json() as any;
-        // 상품 데이터가 있으면 파싱, 없으면 raw 반환
-        const { parseCostcoProductForAPI } = await import('./costco');
-        const product = parseCostcoProductForAPI ? parseCostcoProductForAPI(data) : data;
-        const result = JSON.stringify({
-          promoStartDate: data.couponDiscount?.discountStartDate || data.couponDiscount?.localDiscountStartDate
-            || data.promotions?.[0]?.startDate || null,
-          promoEndDate: data.couponDiscount?.discountEndDate || data.couponDiscount?.localDiscountEndDate
-            || data.promotions?.[0]?.endDate || null,
-          period: data.couponDiscount?.discountEndDate
-            ? `~ ${data.couponDiscount.discountEndDate.slice(0,10)}` : null,
-          raw: JSON.stringify(data).slice(0, 600),
-        });
-        await env.CACHE.put(cacheKey, result, { expirationTtl: 300 });
-        return new Response(result, { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
-      }
-
-      // GET /api/costco/search?keyword=프라이팬&page=0
-      if (path === '/api/costco/search' && request.method === 'GET') {
-        const keyword = url.searchParams.get('keyword') || '';
-        const page = parseInt(url.searchParams.get('page') || '0');
-        if (!keyword) return json({ error: 'keyword 필수' }, 400);
-
-        const cacheKey = `costco:search:${encodeURIComponent(keyword)}:${page}`;
-        const cached = await env.CACHE.get(cacheKey);
-        if (cached) return new Response(cached, { headers: { 'Content-Type': 'application/json', ...corsHeaders, 'X-Cache': 'HIT' } });
-
-        const { searchCostcoByKeyword } = await import('./costco');
-        const data = await searchCostcoByKeyword(keyword, page, 20);
-        const resultJson = JSON.stringify(data);
-        await env.CACHE.put(cacheKey, resultJson, { expirationTtl: 300 });
-        return new Response(resultJson, { headers: { 'Content-Type': 'application/json', ...corsHeaders } });
-      }
-
       if (path === '/api/costco' && request.method === 'GET') {
         const page = parseInt(url.searchParams.get('page') || '0');
         const size = parseInt(url.searchParams.get('size') || '20');
@@ -466,30 +338,96 @@ export default {
         });
       }
 
-            if (path === '/api/costco/search-all' && request.method === 'GET') {
-        const nocache = url.searchParams.get('nocache') === '1';
-        const cacheKey = `costco:all:${new Date().toISOString().slice(0, 10)}`;
-        if (!nocache) {
-          const cached = await env.CACHE.get(cacheKey);
-          if (cached) {
-            return new Response(cached, {
-              headers: { 'Content-Type': 'application/json', ...corsHeaders, 'X-Cache': 'HIT' },
-            });
+      // GET /api/costco/search?keyword=...&page=0 — 키워드 검색
+      if (path === '/api/costco/search' && request.method === 'GET') {
+        const keyword = url.searchParams.get('keyword') || '';
+        const page = parseInt(url.searchParams.get('page') || '0');
+        if (!keyword) return json({ error: 'keyword 파라미터가 필요합니다' }, 400);
+        try {
+          const data = await searchCostcoByKeyword(keyword, page, 20);
+          return json(data);
+        } catch (e: any) {
+          return json({ error: e.message ?? '코스트코 검색 오류' }, 500);
+        }
+      }
+
+      // ══════════════════════════════════════════
+      // 노노프라이스(nonoprice.co.kr) 연동
+      // ══════════════════════════════════════════
+
+      // GET /api/nonoprice/status — 연동 설정 상태 + 판매자 정보 확인
+      if (path === '/api/nonoprice/status' && request.method === 'GET') {
+        const configured = isNonoPriceConfigured(env);
+        if (!configured) {
+          return json({
+            configured: false,
+            message: 'NONOPRICE_INTERNAL_SECRET, NONOPRICE_RESELLER_ID, NONOPRICE_API_URL 환경변수를 설정하세요.',
+          });
+        }
+        const info = await getNonoPriceResellerInfo(env);
+        return json({
+          configured: true,
+          resellerId: env.NONOPRICE_RESELLER_ID,
+          apiUrl: env.NONOPRICE_API_URL,
+          reseller: info.reseller ?? null,
+          resellerError: info.error ?? null,
+        });
+      }
+
+      // POST /api/nonoprice/register — 코스트코 상품 단건 등록 (AI 설명 생성 포함)
+      if (path === '/api/nonoprice/register' && request.method === 'POST') {
+        const item = await request.json() as any;
+        // name 은 필수
+        if (!item.name) {
+          return json({ error: 'name 필드가 필요합니다' }, 400);
+        }
+        // id 없으면 name 기반으로 자동 생성 (Math.random fallback 대응)
+        if (!item.id || item.id.startsWith('0.')) {
+          item.id = 'costco-' + Buffer.from(item.name).toString('base64').slice(0, 16);
+        }
+        // priceNum 없으면 price 문자열에서 파싱 시도
+        if (!item.priceNum || item.priceNum <= 0) {
+          const parsed = parseInt((item.price || '').replace(/[^0-9]/g, ''));
+          if (parsed > 0) {
+            item.priceNum = parsed;
+          } else {
+            return json({ error: '가격 정보가 없는 상품은 등록할 수 없습니다' }, 400);
           }
         }
-        const trendRows = await env.DB.prepare(
-          `SELECT keyword FROM trend_keywords ORDER BY trend_score DESC LIMIT 10`
-        ).all();
-        const keywords = (trendRows.results as any[]).map(r => r.keyword);
-        if (!keywords.length) return json({ error: '트렌드 키워드가 없습니다. 먼저 트렌드 수집을 실행하세요.' }, 400);
+        // skipAI 파라미터 지원 (일괄 등록 시 속도 우선)
+        const skipAI = item._skipAI === true;
+        // marginRate 파라미터 수신 (기본값 15)
+        const marginRate = typeof item._marginRate === 'number' ? item._marginRate : 15;
+        // 두 계정(이규한 #1 + 이재성 #2) 병렬 등록
+        const allResult = await registerToNonopriceAll(env, item, { skipAI, marginRate });
+        const result = allResult.result1;  // 기본 계정(이규한) 결과로 성공/실패 판단
+        if (result.success) {
+          return json({
+            success: true,
+            id: result.id,
+            name: result.name,
+            price: result.price,
+            duplicate: result.duplicate,
+            nonopriceUrl: result.nonopriceUrl,
+            message: allResult.message ?? result.message,
+            aiDescription: !skipAI,
+            // 계정 #2 결과 (참고용)
+            ...(allResult.result2 ? { result2: { success: allResult.result2.success, id: allResult.result2.id, duplicate: allResult.result2.duplicate, error: allResult.result2.error } } : {}),
+          }, result.duplicate ? 200 : 201);
+        } else {
+          return json({ success: false, error: result.error, _debug: (result as any)._debug }, 400);
+        }
+      }
 
-        const { searchCostcoByTrendKeywords } = await import('./costco');
-        const result = await searchCostcoByTrendKeywords(keywords, 10);
-        const resultJson = JSON.stringify(result);
-        await env.CACHE.put(cacheKey, resultJson, { expirationTtl: 3600 });
-        return new Response(resultJson, {
-          headers: { 'Content-Type': 'application/json', ...corsHeaders },
-        });
+      // POST /api/nonoprice/batch — 코스트코 특가 전체 일괄 등록
+      if (path === '/api/nonoprice/batch' && request.method === 'POST') {
+        const body = await request.json() as any;
+        const products = Array.isArray(body) ? body : body.products;
+        if (!Array.isArray(products) || products.length === 0) {
+          return json({ error: 'products 배열이 필요합니다' }, 400);
+        }
+        const result = await batchRegisterToNonoprice(env, products);
+        return json(result, result.success && result.created > 0 ? 201 : (result.success ? 200 : 400));
       }
 
       if (path.match(/^\/api\/run\/.+$/) && request.method === 'POST') {

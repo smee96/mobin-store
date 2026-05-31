@@ -14,6 +14,11 @@ database_id = "e708f31d-22fe-4cab-b4a4-10b4206684d1"
 binding = "CACHE"
 id = "2129eb33c0d342d481c8aedc09024a41"
 
+# Service Binding: shark-lee-api Worker 직접 연결 (workers.dev 1042 오류 우회)
+[[services]]
+binding = "SHARK_LEE_API"
+service = "shark-lee-api"
+
 # Cron 스케줄 (자동화 트리거)
 [triggers]
 crons = [
@@ -32,3 +37,4 @@ MAX_ADS_RUNNING = "10"
 COUPANG_VENDOR_USER_ID = "valkida"
 COUPANG_DELIVERY_COMPANY_CODE = "CJ"
 COUPANG_OUTBOUND_SHIPPING_PLACE_CODE = "24744420"
+# NONOPRICE_RESELLER_ID_2 = ""  # 이재성 계정 reseller ID — wrangler secret 으로 설정 권장
