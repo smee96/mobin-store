@@ -965,6 +965,9 @@ function openMarginCalc(p) {
   document.getElementById('mc-cp-fee').value = cpFee;
   document.getElementById('mc-nv-fee').value = nvFee;
   recalcMC('cp'); recalcMC('nv');
+  document.getElementById('mc-nono-margin').value = 15;
+  document.getElementById('mc-nono-unit').value = extractOption(p.name);
+  recalcNono();
   document.getElementById('margin-calc-modal').style.display = 'flex';
 }
 
@@ -1019,6 +1022,94 @@ function goToCoupangReg() {
 
 function goToNaverReg() {
   alert('🚧 네이버 스마트스토어 등록 API 연동 준비 중입니다.\n현재는 마진 계산까지만 가능합니다.');
+}
+
+function recalcNono() {
+  if (!mcProduct) return;
+  const margin = parseFloat(document.getElementById('mc-nono-margin').value) || 0;
+  const priceNum = mcProduct.priceNum || 0;
+  const origNum = mcProduct.originalPriceNum || 0;
+  const hasPromo = origNum > 0;
+
+  // 코스트코 원가 정보 표시
+  document.getElementById('mc-nono-costco-orig').textContent = hasPromo
+    ? (origNum.toLocaleString('ko-KR') + '원 → ' + priceNum.toLocaleString('ko-KR') + '원')
+    : (priceNum.toLocaleString('ko-KR') + '원');
+  const discountEl = document.getElementById('mc-nono-discount-wrap');
+  const discountLbl = document.getElementById('mc-nono-costco-discount');
+  if (hasPromo && mcProduct.discountAmount) {
+    discountEl.style.display = '';
+    discountLbl.textContent = '-' + mcProduct.discountAmount + (mcProduct.discount ? ' (' + mcProduct.discount + ')' : '');
+  } else {
+    discountEl.style.display = 'none';
+  }
+  const periodWrap = document.getElementById('mc-nono-period-wrap');
+  const periodLbl = document.getElementById('mc-nono-period-label');
+  const s = mcProduct.promoStartDate ? mcProduct.promoStartDate.slice(0, 10) : '';
+  const e = mcProduct.promoEndDate ? mcProduct.promoEndDate.slice(0, 10) : '';
+  const periodText = s && e ? s + ' ~ ' + e : e ? '~ ' + e : '';
+  if (periodText) {
+    periodWrap.style.display = '';
+    periodLbl.textContent = periodText;
+  } else {
+    periodWrap.style.display = 'none';
+  }
+
+  const basePrice = hasPromo ? origNum : priceNum;
+  const price = Math.ceil(basePrice * (1 + margin / 100) / 10) * 10;
+  const salePrice = hasPromo ? Math.ceil(priceNum * (1 + margin / 100) / 10) * 10 : 0;
+
+  document.getElementById('mc-nono-price').value = price;
+  const saleCol = document.getElementById('mc-nono-sale-col');
+  saleCol.style.display = hasPromo ? 'block' : 'none';
+  if (hasPromo) {
+    document.getElementById('mc-nono-sale-price').value = salePrice;
+    document.getElementById('mc-nono-period').textContent = periodText || '행사기간 확인 필요';
+  } else {
+    document.getElementById('mc-nono-period').textContent = '상시 판매';
+  }
+}
+
+async function submitNonoRegister() {
+  if (!mcProduct) return;
+  const unit = document.getElementById('mc-nono-unit').value.trim();
+  const price = parseInt(document.getElementById('mc-nono-price').value) || 0;
+  const origNum = mcProduct.originalPriceNum || 0;
+  const hasPromo = origNum > 0;
+  const salePrice = hasPromo ? (parseInt(document.getElementById('mc-nono-sale-price').value) || 0) : 0;
+
+  if (!unit) { alert('단위를 입력하세요. (예: 1세트, 1팩)'); return; }
+  if (!price) { alert('판매가를 확인하세요.'); return; }
+
+  const btn = document.getElementById('mc-nono-submit-btn');
+  btn.disabled = true; btn.textContent = '⏳ 등록 중...';
+
+  const productId = mcProduct.id || '';
+  const body = {
+    name: mcProduct.name,
+    unit,
+    price,
+    ...(hasPromo && salePrice && { salePrice }),
+    ...(hasPromo && mcProduct.promoStartDate && { saleStartDate: mcProduct.promoStartDate.slice(0, 10) }),
+    ...(hasPromo && mcProduct.promoEndDate && { saleEndDate: mcProduct.promoEndDate.slice(0, 10) }),
+    ...(productId && { sourceRef: 'costco:' + productId }),
+    images: mcProduct.allImages || (mcProduct.imageUrl ? [mcProduct.imageUrl] : []),
+  };
+
+  const result = await api('/api/nonoprice/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+  btn.disabled = false; btn.textContent = '🏷️ 노노프라이스 등록';
+  if (result?.success) {
+    closeMarginCalc();
+  } else {
+    const errMsg = result?.results?.find(r => !r.success)?.error || result?.error || '알 수 없는 오류';
+    document.getElementById('mc-nono-error').textContent = '❌ ' + errMsg;
+    document.getElementById('mc-nono-error').style.display = 'block';
+  }
 }
 
 // ── 쿠팡 등록 모달 ──
@@ -1459,6 +1550,44 @@ function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;'
           </div>
         </div>
         <button onclick="goToNaverReg()" class="btn btn-naver" style="width:100%;justify-content:center;margin-top:2px">🏪 네이버 등록하기</button>
+      </div>
+    </div>
+    <!-- 노노프라이스 -->
+    <div style="padding:0 24px 18px">
+      <div style="background:rgba(108,71,232,0.04);border:1.5px solid rgba(108,71,232,0.3);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px">
+        <div style="font-size:13px;font-weight:700;color:var(--accent)">🏷️ 노노프라이스</div>
+        <!-- 코스트코 원가 정보 -->
+        <div style="background:rgba(0,0,0,0.04);border-radius:8px;padding:8px 10px;font-size:12px;display:flex;flex-wrap:wrap;gap:12px">
+          <span>코스트코 원가: <strong id="mc-nono-costco-orig" style="color:var(--text)">—</strong></span>
+          <span id="mc-nono-discount-wrap" style="display:none">할인: <strong id="mc-nono-costco-discount" style="color:var(--danger)">—</strong></span>
+          <span id="mc-nono-period-wrap" style="display:none">행사기간: <strong id="mc-nono-period-label" style="color:var(--accent4)">—</strong></span>
+        </div>
+        <div id="mc-nono-error" style="display:none;font-size:12px;color:var(--danger);padding:4px 0"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+          <div>
+            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">마진율 (%)</label>
+            <input id="mc-nono-margin" class="form-input" type="number" value="15" step="0.5" style="width:100%;box-sizing:border-box" oninput="recalcNono()">
+          </div>
+          <div>
+            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">판매가 (원)</label>
+            <input id="mc-nono-price" class="form-input" type="number" style="width:100%;box-sizing:border-box">
+          </div>
+          <div id="mc-nono-sale-col" style="display:none">
+            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">할인가 (원)</label>
+            <input id="mc-nono-sale-price" class="form-input" type="number" style="width:100%;box-sizing:border-box">
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div>
+            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">단위</label>
+            <input id="mc-nono-unit" class="form-input" type="text" placeholder="예: 1세트, 1팩" style="width:100%;box-sizing:border-box">
+          </div>
+          <div>
+            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">행사기간</label>
+            <div id="mc-nono-period" style="font-size:12px;color:var(--muted);padding:7px 0">—</div>
+          </div>
+        </div>
+        <button onclick="submitNonoRegister()" class="btn btn-primary" style="width:100%;justify-content:center" id="mc-nono-submit-btn">🏷️ 노노프라이스 등록</button>
       </div>
     </div>
     <div style="padding:14px 24px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;border-radius:0 0 16px 16px;background:var(--bg2)">

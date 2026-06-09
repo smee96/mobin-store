@@ -4,6 +4,7 @@ import { search1688 } from './search1688';
 import { registerCoupangProduct, getCoupangProduct, convertToCoupangProduct, getCoupangDisplayCategories, fetchReturnCenterCode } from './coupang';
 import { getCostcoDealsByKeywords } from './costco';
 import { comparePrices } from './priceCompare';
+import { registerToNonoPrice, updateNonoPriceBySourceRef } from './nonoprice';
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -254,6 +255,37 @@ export default {
       }
 
       // ══════════════════════════════════════════
+      // 노노프라이스 연동
+      // ══════════════════════════════════════════
+
+      if (path === '/api/nonoprice/register' && request.method === 'POST') {
+        const body = await request.json() as any;
+        const { name, unit, price, salePrice, saleStartDate, saleEndDate, sourceRef, images } = body;
+        if (!name || !unit || !price) return json({ error: 'name, unit, price 필수' }, 400);
+
+        const basePayload: any = { name, unit, price };
+        if (salePrice != null) basePayload.salePrice = salePrice;
+        if (saleStartDate) basePayload.saleStartDate = saleStartDate;
+        if (saleEndDate) basePayload.saleEndDate = saleEndDate;
+        if (sourceRef) basePayload.sourceRef = sourceRef;
+        if (images?.length) basePayload.images = images;
+
+        const resellerIds = env.NONOPRICE_RESELLER_IDS.split(',').map((s: string) => s.trim()).filter(Boolean);
+        const results = await Promise.all(
+          resellerIds.map((resellerId: string) => registerToNonoPrice({ ...basePayload, resellerId }, env))
+        );
+        const allSuccess = results.every((r: any) => r.success);
+        return json({ success: allSuccess, results }, allSuccess ? 201 : 400);
+      }
+
+      if (path.match(/^\/api\/nonoprice\/update\/.+$/) && request.method === 'PUT') {
+        const sourceRef = decodeURIComponent(path.replace('/api/nonoprice/update/', ''));
+        const body = await request.json() as any;
+        const result = await updateNonoPriceBySourceRef(sourceRef, body, env);
+        return json(result, result.success ? 200 : 400);
+      }
+
+      // ══════════════════════════════════════════
       // 검색 상품 DB 등록
       // ══════════════════════════════════════════
 
@@ -402,9 +434,6 @@ export default {
           headers: { 'x-proxy-secret': 'mobin-proxy-2024-xK9mP3nQ' },
         });
         const data = await res.json() as any;
-        // 상품 데이터가 있으면 파싱, 없으면 raw 반환
-        const { parseCostcoProductForAPI } = await import('./costco');
-        const product = parseCostcoProductForAPI ? parseCostcoProductForAPI(data) : data;
         const result = JSON.stringify({
           promoStartDate: data.couponDiscount?.discountStartDate || data.couponDiscount?.localDiscountStartDate
             || data.promotions?.[0]?.startDate || null,

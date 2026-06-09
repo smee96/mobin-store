@@ -23,6 +23,9 @@ export interface Env {
   COUPANG_RETURN_CONTACT_NAME?: string;
   COUPANG_RETURN_PHONE?: string;
   SMART_STORE_URL: string;
+  NONOPRICE_API: Fetcher;
+  NONOPRICE_INTERNAL_SECRET: string;
+  NONOPRICE_RESELLER_IDS: string;
   MIN_ROAS: string;
   DAILY_BUDGET_PER_AD: string;
   MAX_ADS_RUNNING: string;

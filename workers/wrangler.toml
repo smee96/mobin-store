@@ -32,3 +32,9 @@ MAX_ADS_RUNNING = "10"
 COUPANG_VENDOR_USER_ID = "valkida"
 COUPANG_DELIVERY_COMPANY_CODE = "CJ"
 COUPANG_OUTBOUND_SHIPPING_PLACE_CODE = "24744420"
+NONOPRICE_RESELLER_IDS = "d497d94dd7564c81b9fd4c3acab53b1d,a20db28de71349eda47b4d2b411bd0f3"
+
+# 노노프라이스 Worker → Service Binding (HTTP fetch 대신 직접 통신)
+[[services]]
+binding = "NONOPRICE_API"
+service = "shark-lee-api"
