@@ -1085,6 +1085,7 @@ async function submitNonoRegister() {
   btn.disabled = true; btn.textContent = '⏳ 등록 중...';
 
   const productId = mcProduct.id || '';
+  const costPrice = hasPromo ? origNum : (mcProduct.priceNum || price);
   const body = {
     name: mcProduct.name,
     unit,
@@ -1094,6 +1095,8 @@ async function submitNonoRegister() {
     ...(hasPromo && mcProduct.promoEndDate && { saleEndDate: mcProduct.promoEndDate.slice(0, 10) }),
     ...(productId && { sourceRef: 'costco:' + productId }),
     images: mcProduct.allImages || (mcProduct.imageUrl ? [mcProduct.imageUrl] : []),
+    costPrice,
+    ...(hasPromo && { costSalePrice: mcProduct.priceNum || price }),
   };
 
   const result = await api('/api/nonoprice/register', {

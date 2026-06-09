@@ -11,6 +11,8 @@ export interface NonoPriceRegisterPayload {
   sourceRef?: string;
   status?: 'active' | 'soldout' | 'hidden';
   images?: string[];
+  costPrice?: number;     // 코스트코 정상 판매가 (할인 전)
+  costSalePrice?: number; // 코스트코 행사 결제금액 (할인 후, 행사 있을 때만)
 }
 
 export interface NonoPriceUpdatePayload {
