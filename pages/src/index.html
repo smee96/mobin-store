@@ -1088,7 +1088,7 @@ async function submitNonoRegister() {
     name: mcProduct.name,
     unit,
     costPrice,
-    platformMargin,
+    marginRate: platformMargin,
     ...(hasPromo && mcProduct.discountAmountNum && { discountAmount: mcProduct.discountAmountNum }),
     ...(hasPromo && mcProduct.promoStartDate && { saleStartDate: mcProduct.promoStartDate.slice(0, 10) }),
     ...(hasPromo && mcProduct.promoEndDate && { saleEndDate: mcProduct.promoEndDate.slice(0, 10) }),

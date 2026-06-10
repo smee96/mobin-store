@@ -260,10 +260,10 @@ export default {
 
       if (path === '/api/nonoprice/register' && request.method === 'POST') {
         const body = await request.json() as any;
-        const { name, unit, costPrice, platformMargin, discountAmount, saleStartDate, saleEndDate, sourceRef, images } = body;
-        if (!name || !unit || !costPrice || platformMargin == null) return json({ error: 'name, unit, costPrice, platformMargin 필수' }, 400);
+        const { name, unit, costPrice, marginRate, discountAmount, saleStartDate, saleEndDate, sourceRef, images } = body;
+        if (!name || !unit || !costPrice || marginRate == null) return json({ error: 'name, unit, costPrice, marginRate 필수' }, 400);
 
-        const basePayload: any = { name, unit, costPrice, platformMargin };
+        const basePayload: any = { name, unit, costPrice, marginRate };
         if (discountAmount != null) basePayload.discountAmount = discountAmount;
         if (saleStartDate) basePayload.saleStartDate = saleStartDate;
         if (saleEndDate) basePayload.saleEndDate = saleEndDate;

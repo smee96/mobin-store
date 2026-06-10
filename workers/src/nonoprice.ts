@@ -5,7 +5,7 @@ export interface NonoPriceRegisterPayload {
   name: string;
   unit: string;
   costPrice: number;        // 코스트코 판매금액 (정상가)
-  platformMargin: number;   // 플랫폼 마진 (%)
+  marginRate: number;       // 플랫폼 마진 (%)
   discountAmount?: number;  // 할인금액 (행사 있을 때만)
   saleStartDate?: string;   // 행사기간 시작
   saleEndDate?: string;     // 행사기간 종료
