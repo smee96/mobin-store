@@ -129,9 +129,10 @@ function parseCostcoProduct(p: any, keyword?: string): CostcoProduct {
   const priceNum = p.price?.value ?? 0;
   const price = p.price?.formattedValue ?? '';
 
-  // 할인 금액 (promotions에서 추출)
+  // 할인 금액 (promotions 우선, 없으면 couponDiscount에서 추출)
   const promos = p.promotions || [];
-  const discountNum = promos[0]?.discount?.value ?? 0;
+  const cd = p.couponDiscount;
+  const discountNum = promos[0]?.discount?.value ?? cd?.discountValue ?? 0;
   const discountAmount = discountNum > 0 ? discountNum.toLocaleString('ko-KR') + '원' : '';
   const originalPriceNum = discountNum > 0 ? priceNum + discountNum : 0;
   const originalPrice = originalPriceNum > 0
@@ -140,7 +141,6 @@ function parseCostcoProduct(p: any, keyword?: string): CostcoProduct {
     ? Math.round((discountNum / originalPriceNum) * 100) + '%' : '';
 
   // 행사기간 (promotions 또는 couponDiscount 어디서든 추출)
-  const cd = p.couponDiscount;
   const promoStartDate: string | undefined =
     promos[0]?.startDate || cd?.discountStartDate || cd?.localDiscountStartDate || undefined;
   const promoEndDate: string | undefined =
