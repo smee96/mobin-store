@@ -7,6 +7,7 @@ export interface CostcoProduct {
   originalPriceNum: number;
   discount: string;
   discountAmount: string;
+  discountAmountNum: number;
   period: string;
   url: string;
   imageUrl: string;
@@ -187,6 +188,7 @@ function parseCostcoProduct(p: any, keyword?: string): CostcoProduct {
     originalPriceNum,
     discount,
     discountAmount,
+    discountAmountNum: discountNum,
     period,
     url: `https://www.costco.co.kr/p/${code}`,
     imageUrl,

@@ -260,17 +260,15 @@ export default {
 
       if (path === '/api/nonoprice/register' && request.method === 'POST') {
         const body = await request.json() as any;
-        const { name, unit, price, salePrice, saleStartDate, saleEndDate, sourceRef, images, costPrice, costSalePrice } = body;
-        if (!name || !unit || !price) return json({ error: 'name, unit, price 필수' }, 400);
+        const { name, unit, costPrice, platformMargin, discountAmount, saleStartDate, saleEndDate, sourceRef, images } = body;
+        if (!name || !unit || !costPrice || platformMargin == null) return json({ error: 'name, unit, costPrice, platformMargin 필수' }, 400);
 
-        const basePayload: any = { name, unit, price };
-        if (salePrice != null) basePayload.salePrice = salePrice;
+        const basePayload: any = { name, unit, costPrice, platformMargin };
+        if (discountAmount != null) basePayload.discountAmount = discountAmount;
         if (saleStartDate) basePayload.saleStartDate = saleStartDate;
         if (saleEndDate) basePayload.saleEndDate = saleEndDate;
         if (sourceRef) basePayload.sourceRef = sourceRef;
         if (images?.length) basePayload.images = images;
-        if (costPrice != null) basePayload.costPrice = costPrice;
-        if (costSalePrice != null) basePayload.costSalePrice = costSalePrice;
 
         const resellerIds = env.NONOPRICE_RESELLER_IDS.split(',').map((s: string) => s.trim()).filter(Boolean);
         const results = await Promise.all(

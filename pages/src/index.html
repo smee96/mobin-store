@@ -1073,30 +1073,27 @@ function recalcNono() {
 async function submitNonoRegister() {
   if (!mcProduct) return;
   const unit = document.getElementById('mc-nono-unit').value.trim();
-  const price = parseInt(document.getElementById('mc-nono-price').value) || 0;
+  const platformMargin = parseFloat(document.getElementById('mc-nono-margin').value) || 0;
   const origNum = mcProduct.originalPriceNum || 0;
   const hasPromo = origNum > 0;
-  const salePrice = hasPromo ? (parseInt(document.getElementById('mc-nono-sale-price').value) || 0) : 0;
 
   if (!unit) { alert('단위를 입력하세요. (예: 1세트, 1팩)'); return; }
-  if (!price) { alert('판매가를 확인하세요.'); return; }
 
   const btn = document.getElementById('mc-nono-submit-btn');
   btn.disabled = true; btn.textContent = '⏳ 등록 중...';
 
   const productId = mcProduct.id || '';
-  const costPrice = hasPromo ? origNum : (mcProduct.priceNum || price);
+  const costPrice = hasPromo ? origNum : (mcProduct.priceNum || 0);
   const body = {
     name: mcProduct.name,
     unit,
-    price,
-    ...(hasPromo && salePrice && { salePrice }),
+    costPrice,
+    platformMargin,
+    ...(hasPromo && mcProduct.discountAmountNum && { discountAmount: mcProduct.discountAmountNum }),
     ...(hasPromo && mcProduct.promoStartDate && { saleStartDate: mcProduct.promoStartDate.slice(0, 10) }),
     ...(hasPromo && mcProduct.promoEndDate && { saleEndDate: mcProduct.promoEndDate.slice(0, 10) }),
     ...(productId && { sourceRef: 'costco:' + productId }),
     images: mcProduct.allImages || (mcProduct.imageUrl ? [mcProduct.imageUrl] : []),
-    costPrice,
-    ...(hasPromo && { costSalePrice: mcProduct.priceNum || price }),
   };
 
   const result = await api('/api/nonoprice/register', {
