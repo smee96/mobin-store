@@ -4,6 +4,7 @@ export interface CostcoProduct {
   price: string;
   priceNum: number;
   originalPrice: string;
+  originalPriceNum: number;
   discount: string;
   discountAmount: string;
   period: string;
@@ -183,6 +184,7 @@ function parseCostcoProduct(p: any, keyword?: string): CostcoProduct {
     price,
     priceNum,
     originalPrice,
+    originalPriceNum,
     discount,
     discountAmount,
     period,
@@ -202,4 +204,29 @@ function parseCostcoProduct(p: any, keyword?: string): CostcoProduct {
     promoStartDate,
     promoEndDate,
   };
+}
+
+// ── 여러 트렌드 키워드로 검색 후 중복 제거 집계 ──
+export async function searchCostcoByTrendKeywords(
+  keywords: string[],
+  maxPerKeyword: number = 10
+): Promise<{ products: CostcoProduct[]; total: number; keywords: string[] }> {
+  const seen = new Set<string>();
+  const products: CostcoProduct[] = [];
+
+  for (const kw of keywords) {
+    try {
+      const result = await searchCostcoByKeyword(kw, 0, maxPerKeyword);
+      for (const p of result.products) {
+        if (!seen.has(p.id)) {
+          seen.add(p.id);
+          products.push(p);
+        }
+      }
+    } catch {
+      // 키워드별 실패는 무시하고 계속
+    }
+  }
+
+  return { products, total: products.length, keywords };
 }
